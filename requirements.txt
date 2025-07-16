@@ -1,3 +1,5 @@
 python-dotenv
 discord.py
 notion-client
+python-dateutil
+pytz

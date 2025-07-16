@@ -30,6 +30,6 @@ def run():
     @bot.command(name='sync', description='Sync command tree. Careful not to spam due to rate limit.')
     async def sync(ctx):
         await bot.tree.sync()
-        await ctx.send('Command tree synced.')
+        await ctx.send('Command tree synced. Use Ctrl+R to refresh commands in Desktop Discord.')
 
     bot.run(discord_bot_token)
