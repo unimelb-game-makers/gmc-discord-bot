@@ -33,6 +33,11 @@ class NotionCog(commands.Cog):
 
         return dt
 
+    # datetime object to discord timestamp string, e.g. July 19, 2025
+    def datetime_to_discord_long_date(self, dt: datetime) -> str:
+        epoch = round(dt.timestamp())  # Timestamp returns a float so round it
+        return f"<t:{epoch}:D>"
+
     # Setup the event synchronization command
     @app_commands.command(name="eventsync", 
                           description="Update events from Notion.")
@@ -150,7 +155,7 @@ class NotionCog(commands.Cog):
     # Setup the task fetch command
     @app_commands.command(name="listtasks", 
                           description="List tasks marked as In progress from Notion.")
-    async def eventsync(self, interaction: discord.Interaction):
+    async def listtasks(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
         await interaction.response.defer()
         response_string = ""
@@ -171,69 +176,35 @@ class NotionCog(commands.Cog):
             await interaction.followup.send("Failed to query Notion tasks, with .env database id and filters.")
             return
         
-        # Update each notion event
+        # Update each notion task
         response_string_success = "Tasks in progress:\n"
         response_string_failure = "Failed to fetch tasks:\n"
         has_failure = False
         for page in response_object["results"]:
-            # Get event properties
+            # Get task properties
             try:
-                event_name = page["properties"]["Task"]["title"][0]["plain_text"]
-                event_date_object = page["properties"]["Event Date"]["date"]
+                task_name = page["properties"]["Task"]["title"][0]["plain_text"]
+                task_date_object = page["properties"]["Due"]["date"]
             except Exception as e:
                 has_failure = True
-                response_string_failure += "- <Unknown Notion Event> (Cannot fetch event name and date)\n"
+                response_string_failure += "- <Unknown Notion Task> (Cannot fetch task name and date)\n"
                 continue
-            # Convert event dates to datetime objects
-            if event_date_object is None:
+            # Convert task dates to datetime objects
+            if task_date_object is None:
                 has_failure = True
-                response_string_failure += "- " + event_name + " (Nothing set in the Event Date column)\n"
+                response_string_failure += "- " + task_name + " (Nothing set in the Due Date column)\n"
                 continue
             try:
-                event_start_time_str = event_date_object["start"]
-                event_end_time_str = event_date_object["end"]
-                event_start_time_dt = self.parse_time_string(event_start_time_str)
-                if event_end_time_str is not None:
-                    event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
-                else:
-                    event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59)
+                task_due_time_str = task_date_object["start"]
+                if task_date_object["end"] is not None:
+                    task_due_time_str = task_date_object["end"]
+                task_due_time_dt = self.parse_time_string(task_due_time_str, 21, 0)
+                task_due_time_discord_str = self.datetime_to_discord_long_date(task_due_time_dt)
             except Exception as e:
                 has_failure = True
-                response_string_failure += "- " + event_name + " (Cannot convert event dates)\n"
+                response_string_failure += "- " + task_name + " (Cannot convert task due dates)\n"
                 continue
-            
-            if event_name in discord_events:
-                try:
-                    ev = discord_events[event_name]
-                    edit_kwargs = {}
-                    if ev.start_time != event_start_time_dt:
-                        edit_kwargs["start_time"] = event_start_time_dt
-                    if ev.end_time != event_end_time_dt:
-                        edit_kwargs["end_time"] = event_end_time_dt
-                    if edit_kwargs:
-                        await ev.edit(**edit_kwargs)
-                        response_string_success += "- " + event_name + " (Edited)\n"
-                    else:
-                        response_string_success += "- " + event_name + " (Unchanged)\n"
-                except Exception as e:
-                    has_failure = True
-                    response_string_failure += "- " + event_name + " (Cannot edit existing discord event)\n"
-                    continue
-            else:
-                try:
-                    await guild.create_scheduled_event(
-                        name=event_name,
-                        start_time=event_start_time_dt,
-                        end_time=event_end_time_dt,
-                        entity_type=discord.EntityType.external,
-                        privacy_level=discord.PrivacyLevel.guild_only,
-                        location="",
-                    )
-                    response_string_success += "- " + event_name + " (Created)\n"
-                except Exception as e:
-                    has_failure = True
-                    response_string_failure += "- " + event_name + " (Cannot create new discord event)\n"
-                    continue
+            response_string_success += "- " + task_name + " - Due: " + task_due_time_discord_str + ")\n"
 
         # Follow up message
         response_string += response_string_success
