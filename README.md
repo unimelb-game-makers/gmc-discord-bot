@@ -16,7 +16,7 @@ Custom python discord bot for UMGMC discord
 
 - Notion events to discord events, commands for managing
 - Notion task reminder
-- Game jam itch announcement synchronization
+- Game jam itch announcement synchronization (?)
 - Memes
 
 ## Reference

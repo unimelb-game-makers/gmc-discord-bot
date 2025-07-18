@@ -3,3 +3,4 @@ discord.py
 notion-client
 python-dateutil
 pytz
+openai

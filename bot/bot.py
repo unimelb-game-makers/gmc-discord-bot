@@ -8,6 +8,7 @@ from bot.config import discord_bot_token
 from bot.cogs.itch import ItchCog
 from bot.cogs.notion import NotionCog
 from bot.cogs.others import OthersCog
+from bot.cogs.ai import AiCog
 
 def run():
     
@@ -17,12 +18,13 @@ def run():
 
     bot = commands.Bot(command_prefix='/', intents=intents)
     
-    # Dynamically load cogs: itch, notion, and others from './bot/cogs' when ready
+    # Dynamically load cogs: itch, notion, ai, and others from './bot/cogs' when ready
     @bot.event
     async def on_ready():
         await bot.add_cog(ItchCog(bot))
         await bot.add_cog(NotionCog(bot))
         await bot.add_cog(OthersCog(bot))
+        await bot.add_cog(AiCog(bot))
         print("Bot ready!")
 
     # Setup resync command.
