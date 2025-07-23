@@ -4,4 +4,4 @@ from test.test import *
 import asyncio
 
 if __name__ == "__main__":
-    asyncio.run(test_notion_query_task_parse())
+    asyncio.run(test_notion_query_event_parse())

@@ -37,30 +37,36 @@ async def test_notion_query_event_database():
     print("Printing the event database:")
     pprint.pprint(response_object)
 
+# Notes:
+# Filtered by Public Checkbox
+# Public Name MUST BE NON-BLANK
+# Event Date MUST BE NON-BLANK and use the correct dates in AEST
+# Public Description, Venue and Thumbnail are synced in a best-effort manner
+# Images hosted on Notion expire in 1 hour so use external URLs if possible!
+# Key names and types are HARDCODED, so please inform any changes!!
 
+# For discord events:
+# 1. You can't scehdule events in the past
+# 2. Location string must be 100 or fewer characters in length
 async def test_notion_query_event_parse():
     notion_client = AsyncClient(auth=notion_authentication_token)
 
     response_object = await notion_client.databases.query(
         notion_events_database_id,
         filter={
-            "or": [{
-                "property": "Status",
-                "status": {
-                    "equals": "Planning"
-                }
-            }, {
-                "property": "Status",
-                "status": {
-                    "equals": "In progress"
-                }
-            }]
+            "property": "Public Checkbox",
+            "checkbox": {
+                "equals": True
+            }
         })
 
     print("Event result:")
     for page in response_object["results"]:
-        pprint.pprint(page["properties"]["Project name"]["title"][0]["plain_text"])
+        pprint.pprint(page["properties"]["Public Name"]["rich_text"][0]["plain_text"])
         pprint.pprint(page["properties"]["Event Date"]["date"])
+        pprint.pprint(page["properties"]["Public Description"]["rich_text"])
+        pprint.pprint(page["properties"]["Venue"]["rich_text"])
+        pprint.pprint(page["properties"]["Thumbnail"])
 
 async def test_notion_query_task_parse():
     notion_client = AsyncClient(auth=notion_authentication_token)

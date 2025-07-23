@@ -9,9 +9,13 @@ from bot.cogs.itch import ItchCog
 from bot.cogs.notion import NotionCog
 from bot.cogs.others import OthersCog
 from bot.cogs.ai import AiCog
+from bot.memory import remove_all_filelocks
 
 def run():
     
+    # Remove filelocks
+    remove_all_filelocks()
+
     # Configure bot intents
     intents = discord.Intents.default()
     intents.message_content = True

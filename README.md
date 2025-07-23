@@ -10,7 +10,7 @@ Custom python discord bot for UMGMC discord
 - ~/py3venv/bin/pip install -r requirements.txt
 - ~/py3venv/bin/python3 -m bot.main (To run the bot for testing)
 - ~/py3venv/bin/python3 -m test.main (To run tests)
-- Create system service for continuous deployment
+- Create system service for continuous deployment (sudo systemctl start gmcbot)
 
 ## Planned features
 

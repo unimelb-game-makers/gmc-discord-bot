@@ -9,6 +9,7 @@ from discord.ext import commands
 from discord import app_commands
 from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, notion_tasks_database_id
+from bot.memory import load_object, sync_object
 
 class NotionCog(commands.Cog):
     def __init__(self, bot):
@@ -16,6 +17,14 @@ class NotionCog(commands.Cog):
         self.notion_client = AsyncClient(auth=notion_authentication_token)
         self.notion_events_database_id = notion_events_database_id
         self.notion_tasks_database_id = notion_tasks_database_id
+        self.discord_managing_event_names_filename = "discord_managing_event_names.pkl"
+        self.discord_managing_event_names = load_object(self.discord_managing_event_names_filename, default_value=[])
+        self.notion_events_filter = {
+            "property": "Public Checkbox",
+            "checkbox": {
+                "equals": True
+            }
+        }
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
@@ -38,9 +47,112 @@ class NotionCog(commands.Cog):
         epoch = round(dt.timestamp())  # Timestamp returns a float so round it
         return f"<t:{epoch}:D>"
 
+    # Parse rich text from Notion for discord markdown with a best-effort approach
+    def parse_rich_text(self, rich_text) -> str:
+        output = ""
+        for text_obj in rich_text:
+            text = text_obj.get("plain_text", "")
+            annotations = text_obj.get("annotations", {})
+            href = text_obj.get("href")
+            if annotations.get("code"):
+                text = f"`{text}`"
+            if annotations.get("bold"):
+                text = f"**{text}**"
+            if annotations.get("italic"):
+                text = f"*{text}*"
+            if annotations.get("underline"):
+                text = f"__{text}__"
+            if annotations.get("strikethrough"):
+                text = f"~~{text}~~"
+            if href:
+                text = f"[{text}]({href})"
+            output += text
+        return output
+
+    # Parse notion event page into {name: Str, start_time: dt obj, end_time: dt obj, description: Str, venue: Str, thumbnail: Str}
+    # or None if failed
+    def parse_notion_event_page(self, page):
+        try:
+            event_name = self.parse_rich_text(page["properties"]["Public Name"]["rich_text"])
+            event_date_object = page["properties"]["Event Date"]["date"]
+            event_start_time_str = event_date_object["start"]
+            event_end_time_str = event_date_object["end"]
+            event_start_time_dt = self.parse_time_string(event_start_time_str)
+            if event_end_time_str is not None:
+                event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
+            else:
+                event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59)
+            event_description = self.parse_rich_text(page["properties"]["Public Description"]["rich_text"])
+            if len(page["properties"]["Venue"]["rich_text"]) > 0:
+                event_venue = self.parse_rich_text(page["properties"]["Venue"]["rich_text"])
+            else:
+                event_venue = ""
+            if len(page["properties"]["Thumbnail"]["files"]) > 0:
+                file_info = page["properties"]["Thumbnail"]["files"][0]
+                if file_info["type"] == "external":
+                    event_thumbnail = file_info["external"]["url"]
+                elif file_info["type"] == "file":
+                    event_thumbnail = file_info["file"]["url"]
+                else:
+                    event_thumbnail = ""
+            else:
+                event_thumbnail = ""
+            return {"name": event_name,
+                "start_time": event_start_time_dt,
+                "end_time": event_end_time_dt,
+                "description": event_description,
+                "venue": event_venue,
+                "thumbnail": event_thumbnail,
+            }
+        except Exception as e:
+            print(f"Error parsing Notion event page: {e}")
+            return None
+    
+    # Clear all discord event memory
+    @app_commands.command(name="cleardiscordeventsmemory", 
+        description="Clear memory for what discord events the bot is managing. Keyed by discord event name.")
+    async def cleardiscordeventsmemory(self, interaction: discord.Interaction):
+        self.discord_managing_event_names = []
+        sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
+        response_string = "Clear complete!"
+        await interaction.response.send_message(response_string)
+    
+    # Remove all discord events created by the bot
+    @app_commands.command(name="clearbotevents", description="Delete all scheduled events created by the bot userid.")
+    async def clear_bot_events(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            guild = interaction.guild
+            bot_user = guild.me
+
+            scheduled_events = await guild.fetch_scheduled_events()
+            response_string = "Clearing events:\n"
+            count_deleted_events = 0
+
+            for event in scheduled_events:
+                if event.creator_id == bot_user.id:
+                    try:
+                        await event.delete()
+                        count_deleted_events += 1
+                    except Exception as e:
+                        print(f"Failed to delete event {event.name}: {e}")
+                        response_string += "Failed to delete: " + event.name + "\n"
+
+            response_string += f"Successfully deleted {count_deleted_events} events\n"
+
+            paginator = commands.Paginator(prefix="", suffix="")
+            for line in response_string.splitlines(): 
+                paginator.add_line(line)
+            for chunk in paginator.pages:
+                await interaction.followup.send(chunk)
+        except Exception as e:
+            print(f"Error clearing bot events: {e}")
+            await interaction.followup.send("An error occurred while trying to delete scheduled events.")
+
     # Setup the event synchronization command
+    # Also keeps memory of what discord events are managed by the bot!
     @app_commands.command(name="eventsync", 
-                          description="Update events from Notion.")
+                          description="Update events from Notion to discord.")
     async def eventsync(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
         await interaction.response.defer()
@@ -48,24 +160,12 @@ class NotionCog(commands.Cog):
 
         # Query notion events
         try:
-            response_string += "Filtering by status as Planning or In progress.\n"
             response_object = await self.notion_client.databases.query(
                 self.notion_events_database_id,
-                filter={
-                    "or": [{
-                        "property": "Status",
-                        "status": {
-                            "equals": "Planning"
-                        }
-                    }, {
-                        "property": "Status",
-                        "status": {
-                            "equals": "In progress"
-                        }
-                    }]
-                })
+                filter=self.notion_events_filter)
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
+            print(f"Error: {e}")
             await interaction.followup.send("Failed to query Notion events, with .env database id and filters.")
             return
         
@@ -74,6 +174,7 @@ class NotionCog(commands.Cog):
             guild = interaction.guild
             discord_events = {ev.name: ev for ev in await guild.fetch_scheduled_events()}
         except Exception as e:
+            print(f"Error: {e}")
             await interaction.followup.send("Failed to fetch existing discord events.")
             return
         
@@ -83,30 +184,18 @@ class NotionCog(commands.Cog):
         has_failure = False
         for page in response_object["results"]:
             # Get event properties
-            try:
-                event_name = page["properties"]["Project name"]["title"][0]["plain_text"]
-                event_date_object = page["properties"]["Event Date"]["date"]
-            except Exception as e:
+            page_parsed = self.parse_notion_event_page(page)
+            if page_parsed is None:
                 has_failure = True
-                response_string_failure += "- <Unknown Notion Event> (Cannot fetch event name and date)\n"
+                response_string_failure += "- <Unknown Notion Event> (Cannot parse page)\n"
                 continue
-            # Convert event dates to datetime objects
-            if event_date_object is None:
-                has_failure = True
-                response_string_failure += "- " + event_name + " (Nothing set in the Event Date column)\n"
-                continue
-            try:
-                event_start_time_str = event_date_object["start"]
-                event_end_time_str = event_date_object["end"]
-                event_start_time_dt = self.parse_time_string(event_start_time_str)
-                if event_end_time_str is not None:
-                    event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
-                else:
-                    event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59)
-            except Exception as e:
-                has_failure = True
-                response_string_failure += "- " + event_name + " (Cannot convert event dates)\n"
-                continue
+            else:
+                event_name = page_parsed["name"]
+                event_start_time_dt = page_parsed["start_time"]
+                event_end_time_dt = page_parsed["end_time"]
+                event_description = page_parsed["description"]
+                event_venue = page_parsed["venue"]
+                event_thumbnail = page_parsed["thumbnail"]
             
             if event_name in discord_events:
                 try:
@@ -116,30 +205,70 @@ class NotionCog(commands.Cog):
                         edit_kwargs["start_time"] = event_start_time_dt
                     if ev.end_time != event_end_time_dt:
                         edit_kwargs["end_time"] = event_end_time_dt
+                    if ev.description != event_description:
+                        edit_kwargs["description"] = event_description
+                    if ev.location != event_venue:
+                        edit_kwargs["location"] = event_venue
+                    if (ev.cover_image is None and event_thumbnail != "") or \
+                      (ev.cover_image is not None and ev.image.url != event_thumbnail):
+                        if event_thumbnail != "":
+                            edit_kwargs["image"] = discord.Asset(url=event_thumbnail)
+                        else:
+                            edit_kwargs["image"] = None
                     if edit_kwargs:
                         await ev.edit(**edit_kwargs)
                         response_string_success += "- " + event_name + " (Edited)\n"
                     else:
                         response_string_success += "- " + event_name + " (Unchanged)\n"
                 except Exception as e:
+                    print(f"Error: {e}")
                     has_failure = True
-                    response_string_failure += "- " + event_name + " (Cannot edit existing discord event)\n"
+                    response_string_failure += "- " + event_name + " (Got error editing existing discord event)\n"
                     continue
             else:
                 try:
-                    await guild.create_scheduled_event(
+                    ev = await guild.create_scheduled_event(
                         name=event_name,
+                        description=event_description,
                         start_time=event_start_time_dt,
                         end_time=event_end_time_dt,
                         entity_type=discord.EntityType.external,
                         privacy_level=discord.PrivacyLevel.guild_only,
-                        location="",
+                        location=event_venue,
                     )
+                    if event_thumbnail != "":
+                        edit_kwargs["image"] = discord.Asset(url=event_thumbnail)
+                        await ev.edit(**edit_kwargs)
                     response_string_success += "- " + event_name + " (Created)\n"
                 except Exception as e:
+                    print(f"Error: {e}")
                     has_failure = True
-                    response_string_failure += "- " + event_name + " (Cannot create new discord event)\n"
+                    response_string_failure += "- " + event_name + " (Error when creating new discord event)\n"
                     continue
+        
+        # Remove unmentioned memorized tracking discord events
+        sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
+        notion_event_names = []
+        for page in response_object["results"]:
+            parsed_page = self.parse_notion_event_page(page)
+            if parsed_page is not None:
+                notion_event_names.append(parsed_page["name"])
+        delete_keys = set(self.discord_managing_event_names) - set(notion_event_names)
+        for event_name in delete_keys:
+            if event_name in discord_events:
+                try:
+                    # Delete the discord event if it exists
+                    ev = discord_events[event_name]
+                    await ev.delete()
+                    response_string_success += "- " + event_name + " (Removed)\n"
+                except Exception as e:
+                    print(f"Error: {e}")
+                    has_failure = True
+                    response_string_failure += "- " + event_name + " (Cannot remove the event)\n"
+            else:
+                response_string_success += "- " + event_name + " (Already removed)\n"
+        self.discord_managing_event_names = notion_event_names
+        sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
 
         # Follow up message
         response_string += response_string_success
@@ -173,6 +302,7 @@ class NotionCog(commands.Cog):
                 })
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
+            print(f"Error: {e}")
             await interaction.followup.send("Failed to query Notion tasks, with .env database id and filters.")
             return
         
@@ -186,6 +316,7 @@ class NotionCog(commands.Cog):
                 task_name = page["properties"]["Task"]["title"][0]["plain_text"]
                 task_date_object = page["properties"]["Due"]["date"]
             except Exception as e:
+                print(f"Error: {e}")
                 has_failure = True
                 response_string_failure += "- <Unknown Notion Task> (Cannot fetch task name and date)\n"
                 continue
@@ -201,6 +332,7 @@ class NotionCog(commands.Cog):
                 task_due_time_dt = self.parse_time_string(task_due_time_str, 21, 0)
                 task_due_time_discord_str = self.datetime_to_discord_long_date(task_due_time_dt)
             except Exception as e:
+                print(f"Error: {e}")
                 has_failure = True
                 response_string_failure += "- " + task_name + " (Cannot convert task due dates)\n"
                 continue

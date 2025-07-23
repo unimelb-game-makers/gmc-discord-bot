@@ -4,3 +4,4 @@ notion-client
 python-dateutil
 pytz
 openai
+filelock
