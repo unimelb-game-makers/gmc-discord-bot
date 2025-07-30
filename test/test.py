@@ -42,11 +42,10 @@ async def test_notion_query_event_database():
 # Public Name MUST BE NON-BLANK
 # Event Date MUST BE NON-BLANK and use the correct dates in AEST
 # Public Description, Venue and Thumbnail are synced in a best-effort manner
-# Images hosted on Notion expire in 1 hour so use external URLs if possible!
 # Key names and types are HARDCODED, so please inform any changes!!
 
 # For discord events:
-# 1. You can't scehdule events in the past
+# 1. You can't schedule events in the past
 # 2. Location string must be 100 or fewer characters in length
 async def test_notion_query_event_parse():
     notion_client = AsyncClient(auth=notion_authentication_token)
