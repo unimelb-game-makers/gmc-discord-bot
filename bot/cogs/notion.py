@@ -5,7 +5,7 @@ from datetime import datetime
 from dateutil import parser
 import pytz
 import re
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, notion_tasks_database_id
@@ -28,6 +28,32 @@ class NotionCog(commands.Cog):
         }
         self.discord_events_thumbnails_filename = "discord_events_thumbnails.pkl"
         self.discord_events_thumbnails = load_object(self.discord_events_thumbnails_filename, default_value={})
+        self.notion_tasks_filter = {
+            "or": [
+                {
+                    "property": "Status",
+                    "status": {
+                        "equals": "In progress"
+                    }
+                },
+                {
+                    "property": "Status",
+                    "status": {
+                        "equals": "Not started"
+                    }
+                }
+            ]
+        }
+        self.daily_scheduled_time_filename = "daily_scheduled_time.pkl"
+        self.daily_scheduled_time = load_object(self.daily_scheduled_time_filename, default_value={"hour": 10, "minute": 0})
+        self.last_run_date_filename = "last_run_date.pkl"
+        self.last_run_date = load_object(self.last_run_date_filename, default_value=None)
+        self.report_channel_id_filename = "report_channel_id.pkl"
+        self.report_channel_id = load_object(self.report_channel_id_filename, default_value=1369549200676884552)
+        self.daily_report.start()
+
+    def cog_unload(self):
+        self.daily_report.cancel()
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
@@ -52,6 +78,16 @@ class NotionCog(commands.Cog):
     def datetime_to_discord_long_date(self, dt: datetime) -> str:
         epoch = round(dt.timestamp())  # Timestamp returns a float so round it
         return f"<t:{epoch}:D>"
+
+    # datetime object to discord timestamp string, e.g. August 5, 2024 4:00 PM
+    def datetime_to_discord_short_datetime(self, dt: datetime) -> str:
+        epoch = round(dt.timestamp())  # Timestamp returns a float so round it
+        return f"<t:{epoch}:f>"
+
+    # datetime object to discord timestamp string, e.g. 4:00 PM
+    def datetime_to_discord_short_time(self, dt: datetime) -> str:
+        epoch = round(dt.timestamp())  # Timestamp returns a float so round it
+        return f"<t:{epoch}:t>"
 
     # Parse rich text from Notion for discord markdown with a best-effort approach
     def parse_rich_text(self, rich_text) -> str:
@@ -329,10 +365,121 @@ class NotionCog(commands.Cog):
             paginator.add_line(line)
         for chunk in paginator.pages:
             await interaction.followup.send(chunk)
+    
+    # Parse notion ids to discord url
+    def parse_ids_to_url(self, notion_ids) -> str:
+        notion_ids = [re.sub(r'[^0-9a-z]', '', s.lower()) for s in notion_ids]
+        n = len(notion_ids)
+        if n == 0:
+            return ""
+        elif n == 1:
+            return "[Related project](https://www.notion.so/" + notion_ids[0] + ")"
+        else:
+            response_string = "Related projects: "
+            for x in range(1, n + 1):
+                if x == n:
+                    response_string += "[" + str(x) + "](https://www.notion.so/" + notion_ids[x - 1] + ")"
+                else:
+                    response_string += "[" + str(x) + "](https://www.notion.so/" + notion_ids[x - 1] + ") "
+            return response_string
+
+    # Parse notion task page as a dict object. Blank properties marked as None. 
+    # Returns None if failed to parse or lack critical info
+    def parse_notion_task_page(self, page):
+        try:
+            task_name = self.parse_rich_text(page["properties"]["Task"]["title"])
+            task_date_object = page["properties"]["Due"]["date"]
+            if task_date_object is None:
+                return None
+            task_due_time_str = task_date_object["start"]
+            if task_date_object["end"] is not None:
+                task_due_time_str = task_date_object["end"]
+            task_due_time_dt = self.parse_time_string(task_due_time_str, 21, 0)
+            task_related_team = [tag["name"] for tag in page["properties"]["Team"]["multi_select"]]
+            task_assignee = [person["name"] for person in page["properties"]["Assignee"]["people"]]
+            task_status = page["properties"]["Status"]["status"]["name"]
+            task_related_project = self.parse_ids_to_url([project["id"] for project in page["properties"]["Project"]["relation"]])
+            return {"name": task_name, "due_time": task_due_time_dt, "related_teams": task_related_team, 
+            "assignee": task_assignee, "status": task_status, "related_project": task_related_project}
+        except Exception as e:
+            print(f"Error parsing Notion task page: {e}")
+            return None
+
+    # Fetch notion tasks summary string
+    def fetch_notion_tasks_summary(self, response_object):
+        # Fetch each notion task
+        task_count = 0
+        response_string_success = "Tasks due " + self.datetime_to_discord_long_date(self.current_time()) + ":\n"
+        for page in response_object["results"]:
+            # Get task properties
+            page_parsed = self.parse_notion_task_page(page)
+            if page_parsed is None:
+                continue
+            task_name = page_parsed["name"]
+            task_date_object = page_parsed["due_time"]
+            task_related_teams = page_parsed["related_teams"]
+            task_assignee = page_parsed["assignee"]
+            task_status = page_parsed["status"]
+            task_related_project = page_parsed["related_project"]
+            
+            if task_date_object.date() != self.current_time().date():
+                continue
+            
+            response_string_success += "- " + task_name + " (" + task_status + ") " + task_related_project + "\n"
+            task_count += 1
+        return (task_count, response_string_success)
+
+    # Current time command
+    @app_commands.command(name="currenttime", 
+                          description="Name current time in discord format.")
+    async def currenttime(self, interaction: discord.Interaction):
+        response_string = "Current time: " + self.datetime_to_discord_short_datetime(self.current_time())
+        await interaction.response.send_message(response_string)
+    
+    # Format time command
+    @app_commands.command(name="formattime", 
+                          description="Name time in discord format.")
+    @app_commands.describe(
+        hours="Hour of the day (0–23)",
+        minutes="Minute of the hour (0–59)"
+    )
+    async def formattime(self, interaction: discord.Interaction, hours: int, minutes: int):
+        try:
+            # Build datetime object using today's date and provided time
+            now = self.current_time()
+            dt = now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+
+            # Format to Discord timestamp using your existing method
+            formatted = self.datetime_to_discord_short_datetime(dt)
+
+            await interaction.response.send_message(f"Formatted time: {formatted}")
+        except ValueError as e:
+            await interaction.response.send_message(f"Invalid time provided: {e}", ephemeral=True)
+    
+    # Set daily schedule time command
+    @app_commands.command(name="setdailytime", 
+                          description="Set daily scheduled reminders time.")
+    @app_commands.describe(
+        hours="Hour of the day (0–23)",
+        minutes="Minute of the hour (0–59)"
+    )
+    async def setdailytime(self, interaction: discord.Interaction, hours: int, minutes: int):
+        try:
+            now = self.current_time()
+            dt = now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+            formatted = self.datetime_to_discord_short_time(dt)
+            self.daily_scheduled_time = {"hour": hours, "minute": minutes}
+            sync_object(self.daily_scheduled_time, self.daily_scheduled_time_filename)
+            self.last_run_date = None
+            sync_object(self.last_run_date, self.last_run_date_filename)
+
+            await interaction.response.send_message(f"New scheduled time: {formatted}")
+        except ValueError as e:
+            await interaction.response.send_message(f"Invalid time provided: {e}", ephemeral=True)
 
     # Setup the task fetch command
     @app_commands.command(name="listtasks", 
-                          description="List tasks marked as In progress from Notion.")
+                          description="List tasks with due dates set as today from Notion.")
     async def listtasks(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
         await interaction.response.defer()
@@ -340,57 +487,22 @@ class NotionCog(commands.Cog):
 
         # Query notion tasks
         try:
-            response_string += "Filtering by status as In progress.\n"
+            response_string += "Filtering by status as In progress or Not started.\n"
             response_object = await self.notion_client.databases.query(
                 self.notion_tasks_database_id,
-                filter={
-                    "property": "Status",
-                    "status": {
-                        "equals": "In progress"
-                    }
-                })
+                filter=self.notion_tasks_filter)
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Query Notion Tasks Error: {e}")
             await interaction.followup.send("Failed to query Notion tasks, with .env database id and filters.")
             return
         
-        # Update each notion task
-        response_string_success = "Tasks in progress:\n"
-        response_string_failure = "Failed to fetch tasks:\n"
-        has_failure = False
-        for page in response_object["results"]:
-            # Get task properties
-            try:
-                task_name = page["properties"]["Task"]["title"][0]["plain_text"]
-                task_date_object = page["properties"]["Due"]["date"]
-            except Exception as e:
-                print(f"Fetching Notion Task Properties Error: {e}")
-                has_failure = True
-                response_string_failure += "- <Unknown Notion Task> (Cannot fetch task name and date)\n"
-                continue
-            # Convert task dates to datetime objects
-            if task_date_object is None:
-                has_failure = True
-                response_string_failure += "- " + task_name + " (Nothing set in the Due Date column)\n"
-                continue
-            try:
-                task_due_time_str = task_date_object["start"]
-                if task_date_object["end"] is not None:
-                    task_due_time_str = task_date_object["end"]
-                task_due_time_dt = self.parse_time_string(task_due_time_str, 21, 0)
-                task_due_time_discord_str = self.datetime_to_discord_long_date(task_due_time_dt)
-            except Exception as e:
-                print(f"Converting Task Due Dates Error: {e}")
-                has_failure = True
-                response_string_failure += "- " + task_name + " (Cannot convert task due dates)\n"
-                continue
-            response_string_success += "- " + task_name + " - Due: " + task_due_time_discord_str + ")\n"
-
+        task_count, response_string_success = self.fetch_notion_tasks_summary(response_object)
         # Follow up message
-        response_string += response_string_success
-        if has_failure:
-            response_string += response_string_failure
+        if task_count == 0:
+            response_string += "No tasks due today.\n"
+        else:
+            response_string += response_string_success
 
         try:
             paginator = commands.Paginator(prefix="", suffix="")
@@ -401,3 +513,58 @@ class NotionCog(commands.Cog):
         except Exception as e:
             print(f"Error while sending response: {e}")
             await interaction.followup.send("An error occurred while sending response.")
+        
+    # Set daily schedule channel id
+    @app_commands.command(name="setdailychannel", 
+                          description="Set daily post channel ID.")
+    @app_commands.describe(channel_id="Channel ID to post daily reminders to. (all digits, no #)")
+    async def setdailychannel(self, interaction: discord.Interaction, channel_id: str):
+        self.report_channel_id = int(channel_id)
+        sync_object(self.report_channel_id, self.report_channel_id_filename)
+        await interaction.response.send_message(f"New channel ID: {self.report_channel_id}")
+
+    @tasks.loop(minutes=1)
+    async def daily_report(self):
+        try:
+            now = self.current_time()
+            if (now.hour == self.daily_scheduled_time["hour"] and now.minute == self.daily_scheduled_time["minute"]):
+                if self.last_run_date is None or self.last_run_date != now.date():
+                    self.last_run_date = now.date()  # Prevent repeat runs that day
+                    sync_object(self.last_run_date, self.last_run_date_filename)
+                    try:
+                        channel = self.bot.get_channel(self.report_channel_id)  # Replace with actual channel ID
+                    except Exception as e:
+                        print(f"Channel ID not found: {e}")
+                        return
+
+                    # Query notion tasks
+                    try:
+                        response_object = await self.notion_client.databases.query(
+                            self.notion_tasks_database_id,
+                            filter=self.notion_tasks_filter)
+                        assert "results" in response_object, "No results found in the response object"
+                    except Exception as e:
+                        print(f"Query Notion Tasks Error: {e}")
+                        return
+                    
+                    task_count, response_string = self.fetch_notion_tasks_summary(response_object)
+                    # Follow up message
+                    if task_count == 0:
+                        return
+
+                    try:
+                        paginator = commands.Paginator(prefix="", suffix="")
+                        for line in response_string.splitlines(): 
+                            paginator.add_line(line)
+                        for chunk in paginator.pages:
+                            await channel.send(chunk)
+                    except Exception as e:
+                        print(f"Error while sending response: {e}")
+                        await channel.send("An error occurred while sending response.")
+        except Exception as e:
+            print(f"Error while executing daily report: {e}")
+
+    # Make sure bot is ready before starting doing the daily report
+    @daily_report.before_loop
+    async def before_daily_report(self):
+        await self.bot.wait_until_ready()

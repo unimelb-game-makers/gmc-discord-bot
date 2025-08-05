@@ -73,12 +73,23 @@ async def test_notion_query_task_parse():
     response_object = await notion_client.databases.query(
         notion_tasks_database_id,
         filter={
-            "property": "Status",
-            "status": {
-                "equals": "In progress"
-            }
+            "or": [
+                {
+                    "property": "Status",
+                    "status": {
+                        "equals": "In progress"
+                    }
+                },
+                {
+                    "property": "Status",
+                    "status": {
+                        "equals": "Not started"
+                    }
+                }
+            ]
         })
 
     print("Task result:")
     for page in response_object["results"]:
         pprint.pprint(page)
+        print("")
