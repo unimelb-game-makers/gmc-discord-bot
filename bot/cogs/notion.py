@@ -50,6 +50,8 @@ class NotionCog(commands.Cog):
         self.last_run_date = load_object(self.last_run_date_filename, default_value=None)
         self.report_channel_id_filename = "report_channel_id.pkl"
         self.report_channel_id = load_object(self.report_channel_id_filename, default_value=1369549200676884552)
+        self.name_masks_filename = "name_masks.pkl"
+        self.name_masks = load_object(self.name_masks_filename, default_value={})
         self.daily_report.start()
 
     def cog_unload(self):
@@ -404,6 +406,58 @@ class NotionCog(commands.Cog):
         except Exception as e:
             print(f"Error parsing Notion task page: {e}")
             return None
+            
+    # Display name masks
+    @app_commands.command(name="listnamemask", 
+                          description="List the current name mask for pinging correct users in daily reports.")
+    async def listnamemask(self, interaction: discord.Interaction):
+        response_string = "Current name masks:\n"
+        if len(list(self.name_masks.items())) == 0:
+            response_string += "No name masks set.\n"
+        for name, mask in self.name_masks.items():
+            response_string += f"- {name}: {mask}\n"
+        try:
+            paginator = commands.Paginator(prefix="", suffix="")
+            for line in response_string.splitlines(): 
+                paginator.add_line(line)
+            for idx, chunk in enumerate(paginator.pages):
+                if idx == 0:
+                    await interaction.response.send_message(chunk)
+                else:
+                    await interaction.channel.send(chunk)
+        except Exception as e:
+            print(f"Error while sending response: {e}")
+            await interaction.response.send_message("An error occurred while sending response.")
+
+    # Add or update the name mask
+    @app_commands.command(name="addnamemask", 
+                          description="Add or update a name mask for pinging correct users in daily reports.")
+    @app_commands.describe(
+        name="Raw name as fetched from Notion",
+        masked_name="Masked name, for example @user_id. If masked to \"remove\", entry is removed."
+    )
+    async def addnamemask(self, interaction: discord.Interaction, name: str, masked_name: str):
+        if masked_name.lower() == "remove":
+            if name in self.name_masks:
+                del self.name_masks[name]
+                sync_object(self.name_masks, self.name_masks_filename)
+                response_string = f"Name mask removed: {name}"
+            else:
+                response_string = f"Name mask not found: {name}"
+            await interaction.response.send_message(response_string)
+            return
+        status = "updated" if name in self.name_masks else "added"
+        self.name_masks[name] = masked_name
+        sync_object(self.name_masks, self.name_masks_filename)
+        response_string = f"Name mask {status}: {name} -> {masked_name}"
+        await interaction.response.send_message(response_string)
+
+    # Name mask for pinging users and teams
+    def mask_name(self, name):
+        if name in self.name_masks:
+            return self.name_masks[name]
+        else:
+            return name
 
     # Fetch notion tasks summary string
     def fetch_notion_tasks_summary(self, response_object):
@@ -424,8 +478,10 @@ class NotionCog(commands.Cog):
             
             if task_date_object.date() != self.current_time().date():
                 continue
+
+            ping_string = " ".join([self.mask_name(name) for name in (task_assignee + task_related_teams)]) + "\n"
             
-            response_string_success += "- " + task_name + " (" + task_status + ") " + task_related_project + "\n"
+            response_string_success += "- " + task_name + " (" + task_status + ") " + task_related_project + " | " + ping_string
             task_count += 1
         return (task_count, response_string_success)
 
@@ -523,16 +579,18 @@ class NotionCog(commands.Cog):
         sync_object(self.report_channel_id, self.report_channel_id_filename)
         await interaction.response.send_message(f"New channel ID: {self.report_channel_id}")
 
+    # daily report task run every day at self.daily_scheduled_time
     @tasks.loop(minutes=1)
     async def daily_report(self):
         try:
             now = self.current_time()
-            if (now.hour == self.daily_scheduled_time["hour"] and now.minute == self.daily_scheduled_time["minute"]):
+            if (now.hour > self.daily_scheduled_time["hour"] or 
+               (now.hour == self.daily_scheduled_time["hour"] and now.minute >= self.daily_scheduled_time["minute"])):
                 if self.last_run_date is None or self.last_run_date != now.date():
                     self.last_run_date = now.date()  # Prevent repeat runs that day
                     sync_object(self.last_run_date, self.last_run_date_filename)
                     try:
-                        channel = self.bot.get_channel(self.report_channel_id)  # Replace with actual channel ID
+                        channel = self.bot.get_channel(self.report_channel_id)
                     except Exception as e:
                         print(f"Channel ID not found: {e}")
                         return
