@@ -56,6 +56,7 @@ class MsgQueueCog(commands.Cog):
             "message": message,
             "due_utc": due_utc,
             "status": "pending",
+            "author_id": interaction.user.id,
         }
         self._next_id += 1
         self.jobs.append(job)
@@ -88,15 +89,20 @@ class MsgQueueCog(commands.Cog):
             ch = self.bot.get_channel(job["channel_id"])
             if isinstance(ch, discord.TextChannel):
                 try:
-                    await ch.send(job["message"])
+                    sender_label = ""
+                    author_id = job.get("author_id")
+                    sender_label = f"<@{author_id}>"
+                    
+                    await ch.send(f"{sender_label}: {job['message']}")  
                     job["status"] = "sent"
                 except Exception:
                     job["status"] = "error"
 
 
+
     # --- helpers for time parsing from notion.py ---
 
-        # Parse notion time string to datetime object
+    # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
         # Regular expression to check if it's date-only (e.g., 2025-08-22)
         date_only_pattern = r"^\d{4}-\d{2}-\d{2}$"
