@@ -10,6 +10,7 @@ from bot.cogs.notion import NotionCog
 from bot.cogs.others import OthersCog
 from bot.cogs.ai import AiCog
 from bot.memory import remove_all_filelocks
+from bot.cogs.msgqueueing import MsgQueueCog
 
 def run():
     
@@ -29,6 +30,7 @@ def run():
         await bot.add_cog(NotionCog(bot))
         await bot.add_cog(OthersCog(bot))
         await bot.add_cog(AiCog(bot))
+        await bot.add_cog(MsgQueueCog(bot))
         print("Bot ready!")
 
     # Setup resync command.
