@@ -11,12 +11,22 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 
+from bot.memory import load_object, sync_object
+from enum import Enum
+
 MAX_MSGN_DISPLAY = 5
+
+# enum for msg job status
+class JobStatus(str, Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    ERROR = "error"
 
 class MsgQueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.jobs: list[dict] = []   # [{id, channel_id, message, due_utc, status}]
+        # keys of dict: [{id, channel_id, message, due_utc, status, author_id}]
+        self.jobs: list[dict] = []   
         self._next_id = 1
         self.check_jobs.start()
 
@@ -59,7 +69,7 @@ class MsgQueueCog(commands.Cog):
             "channel_id": channel.id,
             "message": message,
             "due_utc": due_utc,
-            "status": "pending",
+            "status": JobStatus.PENDING,
             "author_id": interaction.user.id,
         }
         self._next_id += 1
@@ -88,7 +98,7 @@ class MsgQueueCog(commands.Cog):
     @tasks.loop(minutes=1)
     async def check_jobs(self):
         now_utc = datetime.now(pytz.utc)
-        due = [j for j in self.jobs if j["status"] == "pending" and j["due_utc"] <= now_utc]
+        due = [j for j in self.jobs if j["status"] == JobStatus.PENDING and j["due_utc"] <= now_utc] 
         for job in due:
             ch = self.bot.get_channel(job["channel_id"])
             if isinstance(ch, discord.TextChannel):
@@ -98,9 +108,9 @@ class MsgQueueCog(commands.Cog):
                     sender_label = f"<@{author_id}>"
                     
                     await ch.send(f"{sender_label}: {job['message']}")  
-                    job["status"] = "sent"
+                    job["status"] = JobStatus.SENT   
                 except Exception:
-                    job["status"] = "error"
+                    job["status"] = JobStatus.ERROR  
  
     # Print out first 5 schedule messages need to be sent 
     @app_commands.command(name="checkmessagequeue", 
@@ -109,7 +119,7 @@ class MsgQueueCog(commands.Cog):
         now_utc = datetime.now(pytz.utc)
 
         # store all pending msgs
-        pending = [j for j in self.jobs if j["status"] == "pending"]
+        pending = [j for j in self.jobs if j["status"] == JobStatus.PENDING] 
         if not pending:
             return await interaction.response.send_message("No pending messages in queue.", ephemeral=True)
 
@@ -132,8 +142,7 @@ class MsgQueueCog(commands.Cog):
 
 
 
-        # --- helpers for time parsing from notion.py ---
-
+    # ----- helpers for time parsing from notion.py -----
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
         # Regular expression to check if it's date-only (e.g., 2025-08-22)
