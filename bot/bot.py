@@ -31,7 +31,7 @@ def run():
         await bot.add_cog(OthersCog(bot))
         await bot.add_cog(AiCog(bot))
         await bot.add_cog(MsgQueueCog(bot))
-        await bot.tree.sync()
+        # await bot.tree.sync()
         print("Bot ready!")
 
     # Setup resync command.

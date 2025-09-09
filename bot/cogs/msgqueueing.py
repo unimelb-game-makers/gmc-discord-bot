@@ -15,6 +15,7 @@ from bot.memory import load_object, sync_object
 from enum import Enum
 
 MAX_MSGN_DISPLAY = 5
+MSG_MEMORY_PATH = "message_queue.pkl"
 
 # enum for msg job status
 class JobStatus(str, Enum):
@@ -28,6 +29,16 @@ class MsgQueueCog(commands.Cog):
         # keys of dict: [{id, channel_id, message, due_utc, status, author_id}]
         self.jobs: list[dict] = []   
         self._next_id = 1
+        self.queue_filename = MSG_MEMORY_PATH
+        state = load_object(self.queue_filename, default_value={"jobs": [], "next_id": 1})
+        try:
+            self.jobs = state.get("jobs", [])
+            for j in self.jobs:
+                if not isinstance(j.get("status"), JobStatus):
+                    j["status"] = JobStatus(j.get("status", JobStatus.PENDING))
+            self._next_id = int(state.get("next_id", 1))
+        except Exception as e:
+            print(f"[msgqueue] load failed, starting fresh: {e}")
         self.check_jobs.start()
 
     # Send message at scheduled time
@@ -74,6 +85,7 @@ class MsgQueueCog(commands.Cog):
         }
         self._next_id += 1
         self.jobs.append(job)
+        self._save_state()
 
         # Confirm to the user
         await interaction.response.send_message(
@@ -90,8 +102,16 @@ class MsgQueueCog(commands.Cog):
             cand += timedelta(days=1)
         return cand
 
+    # save current queue state 
+    def _save_state(self):
+        try:
+            sync_object({"jobs": self.jobs, "next_id": self._next_id}, self.queue_filename)
+        except Exception as e:
+            print(f"[msgqueue] save failed: {e}")
+
     # offload cog
     def cog_unload(self):
+        self._save_state()
         self.check_jobs.cancel()
 
     # check every minute if there's schedule message need to be sent
@@ -111,6 +131,8 @@ class MsgQueueCog(commands.Cog):
                     job["status"] = JobStatus.SENT   
                 except Exception:
                     job["status"] = JobStatus.ERROR  
+                finally:
+                    self._save_state()
  
     # Print out first 5 schedule messages need to be sent 
     @app_commands.command(name="checkmessagequeue", 
@@ -128,12 +150,12 @@ class MsgQueueCog(commands.Cog):
         mel = pytz.timezone("Australia/Melbourne")
 
         msgN = min(MAX_MSGN_DISPLAY, len(pending))
-        lines = [f"Showing {msgN} of {len(pending)} pending messages:"]
+        lines = [f"Showing next {msgN} of {len(pending)} pending messages:"]
         for j in pending[:MAX_MSGN_DISPLAY]:  
             local_dt = j["due_utc"].astimezone(mel)
             ts = self.datetime_to_discord_short_datetime(local_dt)
             author = f"<@{j['author_id']}>" if j.get("author_id") else "someone"
-            lines.append(f"{author} queued a message to be sent in <#{j['channel_id']}> on {ts}.")
+            lines.append(f"{author} scheduled message **#{j['id']}** to be sent in <#{j['channel_id']}> on {ts}.")
 
         if len(pending) > MAX_MSGN_DISPLAY:
             lines.append(f"...and {len(pending) - MAX_MSGN_DISPLAY} more")
