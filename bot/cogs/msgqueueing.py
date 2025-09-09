@@ -5,9 +5,13 @@ from typing import Optional
 from datetime import datetime, timedelta
 from dateutil import parser
 
+from discord import Interaction
+
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
+
+MAX_MSGN_DISPLAY = 5
 
 class MsgQueueCog(commands.Cog):
     def __init__(self, bot):
@@ -97,10 +101,38 @@ class MsgQueueCog(commands.Cog):
                     job["status"] = "sent"
                 except Exception:
                     job["status"] = "error"
+ 
+    # Print out first 5 schedule messages need to be sent 
+    @app_commands.command(name="checkmessagequeue", 
+                        description=" Print out all schedule messages need to be sent")
+    async def check_message_queue(self, interaction):
+        now_utc = datetime.now(pytz.utc)
+
+        # store all pending msgs
+        pending = [j for j in self.jobs if j["status"] == "pending"]
+        if not pending:
+            return await interaction.response.send_message("No pending messages in queue.", ephemeral=True)
+
+        # display in time order
+        pending.sort(key=lambda j: (j["due_utc"], j["id"]))
+        mel = pytz.timezone("Australia/Melbourne")
+
+        msgN = min(MAX_MSGN_DISPLAY, len(pending))
+        lines = [f"Showing {msgN} of {len(pending)} pending messages:"]
+        for j in pending[:MAX_MSGN_DISPLAY]:  
+            local_dt = j["due_utc"].astimezone(mel)
+            ts = self.datetime_to_discord_short_datetime(local_dt)
+            author = f"<@{j['author_id']}>" if j.get("author_id") else "someone"
+            lines.append(f"{author} queued a message to be sent in <#{j['channel_id']}> on {ts}.")
+
+        if len(pending) > MAX_MSGN_DISPLAY:
+            lines.append(f"...and {len(pending) - MAX_MSGN_DISPLAY} more")
+
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
 
-    # --- helpers for time parsing from notion.py ---
+        # --- helpers for time parsing from notion.py ---
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
