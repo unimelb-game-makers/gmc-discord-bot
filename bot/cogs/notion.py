@@ -126,7 +126,9 @@ class NotionCog(commands.Cog):
                 event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
             else:
                 event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59)
-            event_description = self.parse_rich_text(page["properties"]["Public Description"]["rich_text"])
+            # Public description seems to be removed from event database? For now just use empty string
+            # event_description = self.parse_rich_text(page["properties"]["Public Description"]["rich_text"])
+            event_description = ""
             if len(page["properties"]["Venue"]["rich_text"]) > 0:
                 event_venue = self.parse_rich_text(page["properties"]["Venue"]["rich_text"])
             else:
