@@ -186,3 +186,6 @@ temp.output
 
 working_memory/*.pkl
 working_memory/*.pkl.lock
+
+# Vscode settings
+.vscode
