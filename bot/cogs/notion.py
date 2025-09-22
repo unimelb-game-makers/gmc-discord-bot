@@ -72,7 +72,7 @@ class NotionCog(commands.Cog):
             dt = parser.isoparse(time_str)
 
         return dt
-    
+
     def current_time(self, default_timezone="Australia/Melbourne"):
         return datetime.now(pytz.timezone(default_timezone))
 
@@ -153,7 +153,7 @@ class NotionCog(commands.Cog):
         except Exception as e:
             print(f"Error parsing Notion event page: {e}")
             return None
-    
+
     # Update self.discord_events_thumbnails, if url is "" remove the thumbnail instead
     def update_thumbnail(self, key, url):
         if url == "":
@@ -168,9 +168,9 @@ class NotionCog(commands.Cog):
                 sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
         except Exception as e:
             print(f"Error fetching image from URL: {e}")
-    
+
     # Clear all discord event memory
-    @app_commands.command(name="cleardiscordeventsmemory", 
+    @app_commands.command(name="cleardiscordeventsmemory",
         description="Clear memory for what discord events the bot is managing. Keyed by discord event name.")
     async def cleardiscordeventsmemory(self, interaction: discord.Interaction):
         self.discord_managing_event_names = []
@@ -179,7 +179,7 @@ class NotionCog(commands.Cog):
         sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
         response_string = "Clear complete!"
         await interaction.response.send_message(response_string)
-    
+
     # Remove all discord events created by the bot
     @app_commands.command(name="clearbotevents", description="Delete all scheduled events created by the bot userid.")
     async def clear_bot_events(self, interaction: discord.Interaction):
@@ -204,7 +204,7 @@ class NotionCog(commands.Cog):
             response_string += f"Successfully deleted {count_deleted_events} events\n"
 
             paginator = commands.Paginator(prefix="", suffix="")
-            for line in response_string.splitlines(): 
+            for line in response_string.splitlines():
                 paginator.add_line(line)
             for chunk in paginator.pages:
                 await interaction.followup.send(chunk)
@@ -219,7 +219,7 @@ class NotionCog(commands.Cog):
 
     # Setup the event synchronization command
     # Also keeps memory of what discord events are managed by the bot!
-    @app_commands.command(name="eventsync", 
+    @app_commands.command(name="eventsync",
                           description="Update events from Notion to discord.")
     async def eventsync(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
@@ -236,7 +236,7 @@ class NotionCog(commands.Cog):
             print(f"Notion fetching Error: {e}")
             await interaction.followup.send("Failed to query Notion events, with .env database id and filters.")
             return
-        
+
         # Fetch discord events
         try:
             guild = interaction.guild
@@ -245,7 +245,7 @@ class NotionCog(commands.Cog):
             print(f"Discord event fetching Error: {e}")
             await interaction.followup.send("Failed to fetch existing discord events.")
             return
-        
+
         # Update each notion event
         response_string_success = "Updated events:\n"
         response_string_failure = "Failed to update events:\n"
@@ -274,7 +274,7 @@ class NotionCog(commands.Cog):
                     has_failure = True
                     response_string_failure += f"- {event_name} (Location string length is greater than 100 characters)\n"
                     continue
-            
+
             if event_name in discord_events:
                 try:
                     ev = discord_events[event_name]
@@ -332,7 +332,7 @@ class NotionCog(commands.Cog):
                     has_failure = True
                     response_string_failure += "- " + event_name + " (Error when creating new discord event)\n"
                     continue
-        
+
         # Remove unmentioned memorized tracking discord events
         sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
         notion_event_names = []
@@ -365,11 +365,11 @@ class NotionCog(commands.Cog):
             response_string += response_string_failure
 
         paginator = commands.Paginator(prefix="", suffix="")
-        for line in response_string.splitlines(): 
+        for line in response_string.splitlines():
             paginator.add_line(line)
         for chunk in paginator.pages:
             await interaction.followup.send(chunk)
-    
+
     # Parse notion ids to discord url
     def parse_ids_to_url(self, notion_ids) -> str:
         notion_ids = [re.sub(r'[^0-9a-z]', '', s.lower()) for s in notion_ids]
@@ -387,7 +387,7 @@ class NotionCog(commands.Cog):
                     response_string += "[" + str(x) + "](https://www.notion.so/" + notion_ids[x - 1] + ") "
             return response_string
 
-    # Parse notion task page as a dict object. Blank properties marked as None. 
+    # Parse notion task page as a dict object. Blank properties marked as None.
     # Returns None if failed to parse or lack critical info
     def parse_notion_task_page(self, page):
         try:
@@ -403,14 +403,14 @@ class NotionCog(commands.Cog):
             task_assignee = [person["name"] for person in page["properties"]["Assignee"]["people"]]
             task_status = page["properties"]["Status"]["status"]["name"]
             task_related_project = self.parse_ids_to_url([project["id"] for project in page["properties"]["Project"]["relation"]])
-            return {"name": task_name, "due_time": task_due_time_dt, "related_teams": task_related_team, 
+            return {"name": task_name, "due_time": task_due_time_dt, "related_teams": task_related_team,
             "assignee": task_assignee, "status": task_status, "related_project": task_related_project}
         except Exception as e:
             print(f"Error parsing Notion task page: {e}")
             return None
-            
+
     # Display name masks
-    @app_commands.command(name="listnamemask", 
+    @app_commands.command(name="listnamemask",
                           description="List the current name mask for pinging correct users in daily reports.")
     async def listnamemask(self, interaction: discord.Interaction):
         response_string = "Current name masks:\n"
@@ -420,7 +420,7 @@ class NotionCog(commands.Cog):
             response_string += f"- {name}: {mask}\n"
         try:
             paginator = commands.Paginator(prefix="", suffix="")
-            for line in response_string.splitlines(): 
+            for line in response_string.splitlines():
                 paginator.add_line(line)
             for idx, chunk in enumerate(paginator.pages):
                 if idx == 0:
@@ -432,7 +432,7 @@ class NotionCog(commands.Cog):
             await interaction.response.send_message("An error occurred while sending response.")
 
     # Add or update the name mask
-    @app_commands.command(name="addnamemask", 
+    @app_commands.command(name="addnamemask",
                           description="Add or update a name mask for pinging correct users in daily reports.")
     @app_commands.describe(
         name="Raw name as fetched from Notion",
@@ -477,25 +477,25 @@ class NotionCog(commands.Cog):
             task_assignee = page_parsed["assignee"]
             task_status = page_parsed["status"]
             task_related_project = page_parsed["related_project"]
-            
+
             if task_date_object.date() != self.current_time().date():
                 continue
 
             ping_string = " ".join([self.mask_name(name) for name in (task_assignee + task_related_teams)]) + "\n"
-            
+
             response_string_success += "- " + task_name + " (" + task_status + ") " + task_related_project + " | " + ping_string
             task_count += 1
         return (task_count, response_string_success)
 
     # Current time command
-    @app_commands.command(name="currenttime", 
+    @app_commands.command(name="currenttime",
                           description="Name current time in discord format.")
     async def currenttime(self, interaction: discord.Interaction):
         response_string = "Current time: " + self.datetime_to_discord_short_datetime(self.current_time())
         await interaction.response.send_message(response_string)
-    
+
     # Format time command
-    @app_commands.command(name="formattime", 
+    @app_commands.command(name="formattime",
                           description="Name time in discord format.")
     @app_commands.describe(
         hours="Hour of the day (0–23)",
@@ -513,9 +513,9 @@ class NotionCog(commands.Cog):
             await interaction.response.send_message(f"Formatted time: {formatted}")
         except ValueError as e:
             await interaction.response.send_message(f"Invalid time provided: {e}", ephemeral=True)
-    
+
     # Set daily schedule time command
-    @app_commands.command(name="setdailytime", 
+    @app_commands.command(name="setdailytime",
                           description="Set daily scheduled reminders time.")
     @app_commands.describe(
         hours="Hour of the day (0–23)",
@@ -536,7 +536,7 @@ class NotionCog(commands.Cog):
             await interaction.response.send_message(f"Invalid time provided: {e}", ephemeral=True)
 
     # Setup the task fetch command
-    @app_commands.command(name="listtasks", 
+    @app_commands.command(name="listtasks",
                           description="List tasks with due dates set as today from Notion.")
     async def listtasks(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
@@ -554,7 +554,7 @@ class NotionCog(commands.Cog):
             print(f"Query Notion Tasks Error: {e}")
             await interaction.followup.send("Failed to query Notion tasks, with .env database id and filters.")
             return
-        
+
         task_count, response_string_success = self.fetch_notion_tasks_summary(response_object)
         # Follow up message
         if task_count == 0:
@@ -564,16 +564,16 @@ class NotionCog(commands.Cog):
 
         try:
             paginator = commands.Paginator(prefix="", suffix="")
-            for line in response_string.splitlines(): 
+            for line in response_string.splitlines():
                 paginator.add_line(line)
             for chunk in paginator.pages:
                 await interaction.followup.send(chunk)
         except Exception as e:
             print(f"Error while sending response: {e}")
             await interaction.followup.send("An error occurred while sending response.")
-        
+
     # Set daily schedule channel id
-    @app_commands.command(name="setdailychannel", 
+    @app_commands.command(name="setdailychannel",
                           description="Set daily post channel ID.")
     @app_commands.describe(channel_id="Channel ID to post daily reminders to. (all digits, no #)")
     async def setdailychannel(self, interaction: discord.Interaction, channel_id: str):
@@ -586,7 +586,7 @@ class NotionCog(commands.Cog):
     async def daily_report(self):
         try:
             now = self.current_time()
-            if (now.hour > self.daily_scheduled_time["hour"] or 
+            if (now.hour > self.daily_scheduled_time["hour"] or
                (now.hour == self.daily_scheduled_time["hour"] and now.minute >= self.daily_scheduled_time["minute"])):
                 if self.last_run_date is None or self.last_run_date != now.date():
                     self.last_run_date = now.date()  # Prevent repeat runs that day
@@ -606,7 +606,7 @@ class NotionCog(commands.Cog):
                     except Exception as e:
                         print(f"Query Notion Tasks Error: {e}")
                         return
-                    
+
                     task_count, response_string = self.fetch_notion_tasks_summary(response_object)
                     # Follow up message
                     if task_count == 0:
@@ -614,7 +614,7 @@ class NotionCog(commands.Cog):
 
                     try:
                         paginator = commands.Paginator(prefix="", suffix="")
-                        for line in response_string.splitlines(): 
+                        for line in response_string.splitlines():
                             paginator.add_line(line)
                         for chunk in paginator.pages:
                             await channel.send(chunk)
