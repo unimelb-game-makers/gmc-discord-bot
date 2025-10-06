@@ -17,6 +17,7 @@ from enum import Enum
 MAX_MSGN_DISPLAY = 5
 MSG_MEMORY_PATH = "message_queue.pkl"
 # whitelist for message queuening: discor user IDs set
+# {}: everyone has access; {id...}: user(s) with id(s) have acess
 AUTHORISED_IDS = {
     # put your (tester) or authorized people's user IDs here to use message queuening
     # Do NOT commit real IDs to public repos
@@ -64,7 +65,7 @@ class MsgQueueCog(commands.Cog):
         date: Optional[str] = None,      
         time_hm: Optional[str] = None,
     ):
-        if interaction.user.id not in AUTHORISED_IDS:
+        if interaction.user.id not in AUTHORISED_IDS and AUTHORISED_IDS:
             return await interaction.response.send_message(
             "(X) You don’t have permission to schedule messages here.", ephemeral=True
         )
@@ -148,7 +149,7 @@ class MsgQueueCog(commands.Cog):
     @app_commands.command(name="checkmessagequeue", 
                         description=" Print out all schedule messages need to be sent")
     async def check_message_queue(self, interaction):
-        if interaction.user.id not in AUTHORISED_IDS:
+        if interaction.user.id not in AUTHORISED_IDS and AUTHORISED_IDS:
             return await interaction.response.send_message(
             "(X) You don’t have permission to check messages scheduled here.", ephemeral=True
         )
