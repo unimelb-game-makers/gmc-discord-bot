@@ -10,12 +10,18 @@ from discord import Interaction
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-
+ 
 from bot.memory import load_object, sync_object
 from enum import Enum
 
 MAX_MSGN_DISPLAY = 5
 MSG_MEMORY_PATH = "message_queue.pkl"
+# whitelist for message queuening: discor user IDs set
+AUTHORISED_IDS = {
+    # put your (tester) or authorized people's user IDs here to use message queuening
+    # Do NOT commit real IDs to public repos
+    # Get IDs via Developer Mode → Right-click user → Copy ID
+}
 
 # enum for msg job status
 class JobStatus(str, Enum):
@@ -58,6 +64,10 @@ class MsgQueueCog(commands.Cog):
         date: Optional[str] = None,      
         time_hm: Optional[str] = None,
     ):
+        if interaction.user.id not in AUTHORISED_IDS:
+            return await interaction.response.send_message(
+            "(X) You don’t have permission to schedule messages here.", ephemeral=True
+        )
         try:
             if date and time_hm:
                 local_dt = self.parse_time_string(f"{date}T{time_hm}")
@@ -138,6 +148,10 @@ class MsgQueueCog(commands.Cog):
     @app_commands.command(name="checkmessagequeue", 
                         description=" Print out all schedule messages need to be sent")
     async def check_message_queue(self, interaction):
+        if interaction.user.id not in AUTHORISED_IDS:
+            return await interaction.response.send_message(
+            "(X) You don’t have permission to check messages scheduled here.", ephemeral=True
+        )
         now_utc = datetime.now(pytz.utc)
 
         # store all pending msgs
@@ -161,8 +175,6 @@ class MsgQueueCog(commands.Cog):
             lines.append(f"...and {len(pending) - MAX_MSGN_DISPLAY} more")
 
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
-
-
 
     # ----- helpers for time parsing from notion.py -----
     # Parse notion time string to datetime object
