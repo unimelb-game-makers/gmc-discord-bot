@@ -95,3 +95,63 @@ def clear_memory():
             print(f"Error deleting {file_path}: {e}")
             response_string += f"Error deleting: {file_path}\n"
     return response_string
+
+# Jam-specific helper functions for backward compatibility
+def save_jam_data(guild_id: int, data: dict):
+    """Save jam data for a guild using the new memory system"""
+    filename = f"guild_{guild_id}_jam.pkl"
+    jam_data = {
+        "data": data,
+        "updated_at": datetime.now().isoformat(),
+        "timestamp": datetime.now()
+    }
+    save(jam_data, filename)
+
+def load_jam_data(guild_id: int) -> dict:
+    """Load jam data for a guild using the new memory system"""
+    filename = f"guild_{guild_id}_jam.pkl"
+    jam_data = load(filename)
+
+    if jam_data is None:
+        return {}
+
+    try:
+        # Handle both old and new format
+        if "data" in jam_data:
+            return jam_data["data"]
+        else:
+            # Fallback for direct data storage
+            return jam_data
+    except Exception as e:
+        print(f"Error loading jam data: {e}")
+        return {}
+
+def clear_jam_data(guild_id: int = None):
+    """Clear jam data for a guild or all guilds using the new memory system"""
+    if guild_id:
+        filename = f"guild_{guild_id}_jam.pkl"
+        pathname = get_pathname(filename)
+        lock_path = get_lock_path(pathname)
+        lock = FileLock(lock_path, timeout=5)
+        try:
+            with lock:
+                if os.path.exists(pathname):
+                    os.remove(pathname)
+        except Timeout:
+            print(f"Timeout while clearing jam data for guild {guild_id}")
+        except Exception as e:
+            print(f"Error clearing jam data for guild {guild_id}: {e}")
+    else:
+        # Clear all jam files
+        if os.path.exists(memory_directory_name):
+            jam_files = glob.glob(os.path.join(memory_directory_name, 'guild_*_jam.pkl'))
+            for filepath in jam_files:
+                lock_path = get_lock_path(filepath)
+                lock = FileLock(lock_path, timeout=5)
+                try:
+                    with lock:
+                        os.remove(filepath)
+                except Timeout:
+                    print(f"Timeout while clearing {filepath}")
+                except Exception as e:
+                    print(f"Error clearing {filepath}: {e}")
