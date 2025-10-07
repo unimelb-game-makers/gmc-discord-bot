@@ -67,5 +67,7 @@ async def test_notion_query_people_parse():
 
     print("People database result:")
     for page in response_object["results"]:
-        pprint.pprint(page)
-        print("")
+        print("Person:")
+        pprint.pprint(page["properties"]["Display Name"])
+        pprint.pprint(page["properties"]["Notion Account"]["people"])
+        pprint.pprint(page["properties"]["Discord"])

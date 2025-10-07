@@ -8,7 +8,8 @@ import re
 from discord.ext import commands, tasks
 from discord import app_commands
 from notion_client import AsyncClient
-from bot.config import notion_authentication_token, notion_events_database_id, notion_tasks_database_id
+from bot.config import notion_authentication_token, notion_events_database_id, \
+    notion_tasks_database_id, notion_people_database_id
 from bot.memory import load_object, sync_object
 import requests
 
@@ -18,6 +19,7 @@ class NotionCog(commands.Cog):
         self.notion_client = AsyncClient(auth=notion_authentication_token)
         self.notion_events_database_id = notion_events_database_id
         self.notion_tasks_database_id = notion_tasks_database_id
+        self.notion_people_database_id = notion_people_database_id
         self.discord_managing_event_names_filename = "discord_managing_event_names.pkl"
         self.discord_managing_event_names = load_object(self.discord_managing_event_names_filename, default_value=[])
         self.notion_events_filter = {
@@ -628,3 +630,46 @@ class NotionCog(commands.Cog):
     @daily_report.before_loop
     async def before_daily_report(self):
         await self.bot.wait_until_ready()
+
+    # Parse notion people page into {name: Str (display name), notion: Str (user id), discord: Str (tag)}
+    # or None if failed
+    def parse_notion_people_page(self, page):
+        try:
+            name = self.parse_rich_text(page["properties"]["Display Name"]["rich_text"])
+            notion = page["properties"]["Notion Account"]["people"][0]["id"]
+            discord = self.parse_rich_text(page["properties"]["Discord"]["rich_text"])
+            # Field not filled, then treat it as fail
+            if (len(name) == 0 or len(notion) == 0 or len(discord) == 0):
+                return None
+            return {"name": name,
+                "notion": notion,
+                "discord": discord,
+            }
+        except Exception as e:
+            print(f"Error parsing Notion people page: {e}")
+            return None
+
+    # Parse people database command
+    @app_commands.command(name="listpeople",
+                          description="Fetch and parse the Committee Details Database.")
+    async def listpeople(self, interaction: discord.Interaction):
+        # Usually takes some time, so defers interaction
+        await interaction.response.defer()
+        response_string = "List people OK"
+
+        # Query notion people database
+        try:
+            response_object = await self.notion_client.databases.query(
+                self.notion_people_database_id)
+            assert "results" in response_object, "No results found in the response object"
+        except Exception as e:
+            print(f"Notion fetching Error: {e}")
+            await interaction.followup.send("Failed to query Notion Committee Database, with .env database id and filters.")
+            return
+
+        # Parse People Database
+        for page in response_object["results"]:
+            parsed_page = self.parse_notion_people_page(page)
+            print(parsed_page)
+
+        await interaction.followup.send(response_string)
