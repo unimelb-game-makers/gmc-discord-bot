@@ -31,13 +31,8 @@ def run():
         await bot.add_cog(OthersCog(bot))
         await bot.add_cog(AiCog(bot))
         await bot.add_cog(MsgQueueCog(bot))
+        await bot.tree.sync()
 
-        # Auto-sync commands on startup
-        try:
-            synced = await bot.tree.sync()
-            print(f"Synced {len(synced)} command(s)")
-        except Exception as e:
-            print(f"Failed to sync commands: {e}")
 
         print("Bot ready!")
 
