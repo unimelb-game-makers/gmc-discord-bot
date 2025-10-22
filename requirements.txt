@@ -6,4 +6,3 @@ pytz
 openai
 filelock
 requests
-beautifulsoup4

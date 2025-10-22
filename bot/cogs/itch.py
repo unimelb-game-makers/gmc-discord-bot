@@ -24,7 +24,7 @@ class ItchCog(commands.Cog):
     jam = app_commands.Group(name='jam', description='Game jam tracking commands')
 
     def scrape_itch_jam(self, url: str) -> dict:
-        """Scrape itch.io jam page for timing information (using regex parsing)"""
+        """Scrape itch.io jam page for timing information (using BeautifulSoup)"""
         try:
             # Clean URL - remove /preview if present
             url = url.replace('/preview', '')
@@ -38,14 +38,15 @@ class ItchCog(commands.Cog):
             response.raise_for_status()
 
             html_content = response.text
+            soup = BeautifulSoup(html_content, 'html.parser')
 
-            # Extract jam title using regex (since BeautifulSoup might fail)
-            title_match = re.search(r'<h1[^>]*class="[^"]*jam_title[^"]*"[^>]*>(.*?)</h1>', html_content, re.DOTALL | re.IGNORECASE)
-            if not title_match:
-                title_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.DOTALL)
-
-            jam_title = title_match.group(1).strip() if title_match else "Unknown Jam"
-            jam_title = re.sub(r'<[^>]+>', '', jam_title).strip()  # Remove HTML tags
+            # Extract jam title using BeautifulSoup
+            jam_title = "Unknown Jam"
+            title_elem = soup.find('h1', class_=re.compile(r'jam_title'))
+            if not title_elem:
+                title_elem = soup.find('h1')
+            if title_elem:
+                jam_title = title_elem.get_text(strip=True)
 
             # Look for jam status and dates
             status = "unknown"
@@ -54,9 +55,9 @@ class ItchCog(commands.Cog):
             jam_end_date = None
 
             # Look for submission countdown (data-end-time - usually submission deadline)
-            countdown_match = re.search(r'<div[^>]*class="[^"]*countdown[^"]*"[^>]*data-end-time="([^"]+)"', html_content, re.IGNORECASE)
-            if countdown_match:
-                end_timestamp = countdown_match.group(1)
+            countdown_elem = soup.find('div', class_=re.compile(r'countdown'))
+            if countdown_elem and countdown_elem.get('data-end-time'):
+                end_timestamp = countdown_elem.get('data-end-time')
                 try:
                     submission_end_datetime = datetime.fromtimestamp(int(end_timestamp), tz=timezone.utc)
                     submission_end_date = submission_end_datetime
@@ -73,7 +74,7 @@ class ItchCog(commands.Cog):
                 except Exception as e:
                     print(f"Error parsing submission timestamp: {e}")
 
-            # Look for submission end_date in JavaScript
+            # Look for submission end_date in JavaScript/inline scripts
             if not submission_end_date:
                 js_end_date_match = re.search(r'end_date["\']?\s*:\s*["\']([^"\']+)["\']', html_content, re.IGNORECASE)
                 if js_end_date_match:
@@ -107,7 +108,7 @@ class ItchCog(commands.Cog):
                         print(f"Error parsing submission date from JS: {e}")
 
             # Look for jam end date (different from submission deadline)
-            # Usually found in different patterns
+            # Usually found in JavaScript data
             jam_end_match = re.search(r'jam_end["\']?\s*:\s*["\']([^"\']+)["\']', html_content, re.IGNORECASE)
             if not jam_end_match:
                 # Try other patterns for jam end
@@ -128,19 +129,18 @@ class ItchCog(commands.Cog):
                 except Exception as e:
                     print(f"Error parsing jam end date: {e}")
 
-            # If no separate jam end date found, use submission end date + some buffer
+            # If no separate jam end date found, use submission end date
             if not jam_end_date and submission_end_date:
-                # Assume jam ends sometime after submission deadline (common pattern)
                 jam_end_date = submission_end_date
 
-            # Check for text-based status indicators
-            page_text_lower = html_content.lower()
-            if "submission period is over" in page_text_lower or "submissions closed" in page_text_lower:
+            # Check for text-based status indicators using BeautifulSoup
+            page_text = soup.get_text().lower()
+            if "submission period is over" in page_text or "submissions closed" in page_text:
                 status = "ended"
-            elif "submissions open" in page_text_lower or "submit your game" in page_text_lower:
+            elif "submissions open" in page_text or "submit your game" in page_text:
                 if status == "unknown":
                     status = "running"
-            elif "starting soon" in page_text_lower or "not yet started" in page_text_lower:
+            elif "starting soon" in page_text or "not yet started" in page_text:
                 status = "upcoming"
 
             return {
