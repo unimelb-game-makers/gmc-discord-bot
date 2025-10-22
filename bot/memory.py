@@ -96,7 +96,7 @@ def clear_memory():
             response_string += f"Error deleting: {file_path}\n"
     return response_string
 
-# Jam-specific helper functions for backward compatibility
+# Jam-specific helper functions
 def save_jam_data(guild_id: int, data: dict):
     """Save jam data for a guild using the new memory system"""
     filename = f"guild_{guild_id}_jam.pkl"
