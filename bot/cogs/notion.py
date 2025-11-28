@@ -1,7 +1,7 @@
 # Handle notion features
 
 import discord
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 import pytz
 import re
@@ -127,7 +127,7 @@ class NotionCog(commands.Cog):
             if event_end_time_str is not None:
                 event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
             else:
-                event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59)
+                event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59) + timedelta(minutes=1)
             # Public description seems to be removed from event database? For now just use empty string
             # event_description = self.parse_rich_text(page["properties"]["Public Description"]["rich_text"])
             event_description = ""
@@ -219,13 +219,9 @@ class NotionCog(commands.Cog):
         self.discord_events_thumbnails = {}
         sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
 
-    # Setup the event synchronization command
-    # Also keeps memory of what discord events are managed by the bot!
-    @app_commands.command(name="eventsync",
-                          description="Update events from Notion to discord.")
-    async def eventsync(self, interaction: discord.Interaction):
-        # Usually takes some time, so defers interaction
-        await interaction.response.defer()
+    # Attempt to sync events from notion to guild
+    # Returns update status as string
+    async def sync_bot_events(self, guild: discord.Guild):
         response_string = ""
 
         # Query notion events
@@ -236,18 +232,14 @@ class NotionCog(commands.Cog):
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Notion fetching Error: {e}")
-            await interaction.followup.send("Failed to query Notion events, with .env database id and filters.")
-            return
+            return "Failed to query Notion events, with .env database id and filters."
 
         # Fetch discord events
         try:
-            guild = interaction.guild
             discord_events = {ev.name: ev for ev in await guild.fetch_scheduled_events()}
         except Exception as e:
             print(f"Discord event fetching Error: {e}")
-            await interaction.followup.send("Failed to fetch existing discord events.")
-            return
-
+            return "Failed to fetch existing discord events."
         # Update each notion event
         response_string_success = "Updated events:\n"
         response_string_failure = "Failed to update events:\n"
@@ -365,6 +357,19 @@ class NotionCog(commands.Cog):
         response_string += response_string_success
         if has_failure:
             response_string += response_string_failure
+
+        return response_string
+
+    # Setup the event synchronization command
+    # Also keeps memory of what discord events are managed by the bot!
+    @app_commands.command(name="eventsync",
+                          description="Update events from Notion to discord.")
+    async def eventsync(self, interaction: discord.Interaction):
+        # Usually takes some time, so defers interaction
+        await interaction.response.defer()
+        guild = interaction.guild
+
+        response_string = self.sync_bot_events(guild)
 
         paginator = commands.Paginator(prefix="", suffix="")
         for line in response_string.splitlines():
@@ -630,6 +635,57 @@ class NotionCog(commands.Cog):
     @daily_report.before_loop
     async def before_daily_report(self):
         await self.bot.wait_until_ready()
+
+    # daily report task run every day at self.daily_scheduled_time
+    # @tasks.loop(hours=1)
+    # async def hourly_event_update(self):
+    #     # TODO
+    #     await self.eventsync()
+    #     try:
+    #         now = self.current_time()
+    #         if (now.hour > self.daily_scheduled_time["hour"] or
+    #            (now.hour == self.daily_scheduled_time["hour"] and now.minute >= self.daily_scheduled_time["minute"])):
+    #             if self.last_run_date is None or self.last_run_date != now.date():
+    #                 self.last_run_date = now.date()  # Prevent repeat runs that day
+    #                 sync_object(self.last_run_date, self.last_run_date_filename)
+    #                 try:
+    #                     channel = self.bot.get_channel(self.report_channel_id)
+    #                 except Exception as e:
+    #                     print(f"Channel ID not found: {e}")
+    #                     return
+
+    #                 # Query notion tasks
+    #                 try:
+    #                     response_object = await self.notion_client.databases.query(
+    #                         self.notion_tasks_database_id,
+    #                         filter=self.notion_tasks_filter)
+    #                     assert "results" in response_object, "No results found in the response object"
+    #                 except Exception as e:
+    #                     print(f"Query Notion Tasks Error: {e}")
+    #                     return
+
+    #                 task_count, response_string = self.fetch_notion_tasks_summary(response_object)
+    #                 # Follow up message
+    #                 if task_count == 0:
+    #                     return
+
+    #                 try:
+    #                     paginator = commands.Paginator(prefix="", suffix="")
+    #                     for line in response_string.splitlines():
+    #                         paginator.add_line(line)
+    #                     for chunk in paginator.pages:
+    #                         await channel.send(chunk)
+    #                 except Exception as e:
+    #                     print(f"Error while sending response: {e}")
+    #                     await channel.send("An error occurred while sending response.")
+    #     except Exception as e:
+    #         print(f"Error while executing daily report: {e}")
+
+    # 	paginator = commands.Paginator(prefix="", suffix="")
+    # 	for line in response_string.splitlines():
+    # 		paginator.add_line(line)
+    # 	for chunk in paginator.pages:
+    # 		await channel.send(chunk)
 
     # Parse notion people page into {name: Str (display name), notion: Str (user id), discord: Str (tag)}
     # or None if failed
