@@ -6,18 +6,38 @@ Custom python discord bot for UMGMC discord
 - Clone repository on UNIX machine
 - Install python and pip
 - Setup .env environment file
-- I use python venv, so python3 -m venv ~/py3venv (change to your venv directory)
-- ~/py3venv/bin/pip install -r requirements.txt
-- ~/py3venv/bin/python3 -m bot.main (To run the bot for testing)
-- ~/py3venv/bin/python3 -m test.main (To run tests)
-- Create system service for continuous deployment (sudo systemctl start gmcbot)
+- Create and enter virtual environment with ```python3 -m venv .venv && source .venv/bin/activate``` (change to your venv directory)
+- ```pip install -r requirements.txt``` to install dependencies
+- ```python3 -m bot.main``` to run the bot for testing
+- ```python3 -m test.main``` to run tests
+- Create system service for continuous deployment (```sudo systemctl start gmcbot```)
 
-## Planned features
+## Notion features
 
-- Notion events to discord events, commands for managing
+- Notion events integration
+
+
 - Notion task reminders
-- Game jam itch announcement synchronization (?)
-- Memes
+
+
+
+## Message features
+
+- Message queue
+
+
+
+## Itch features
+
+
+
+## AI features
+
+
+
+## Other features
+
+Nothing yet
 
 ## Reference
 
