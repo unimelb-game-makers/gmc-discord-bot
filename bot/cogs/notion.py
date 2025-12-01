@@ -55,9 +55,11 @@ class NotionCog(commands.Cog):
         self.name_masks_filename = "name_masks.pkl"
         self.name_masks = load_object(self.name_masks_filename, default_value={})
         self.daily_report.start()
+        self.hourly_event_update.start()
 
     def cog_unload(self):
         self.daily_report.cancel()
+        self.hourly_event_update.cancel()
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
@@ -221,7 +223,7 @@ class NotionCog(commands.Cog):
 
     # Attempt to sync events from notion to guild
     # Returns update status as string
-    async def sync_bot_events(self, guild: discord.Guild):
+    async def sync_bot_events(self, guild: discord.Guild) -> str:
         response_string = ""
 
         # Query notion events
@@ -369,7 +371,7 @@ class NotionCog(commands.Cog):
         await interaction.response.defer()
         guild = interaction.guild
 
-        response_string = self.sync_bot_events(guild)
+        response_string = await self.sync_bot_events(guild)
 
         paginator = commands.Paginator(prefix="", suffix="")
         for line in response_string.splitlines():
@@ -581,7 +583,7 @@ class NotionCog(commands.Cog):
 
     # Set daily schedule channel id
     @app_commands.command(name="setdailychannel",
-                          description="Set daily post channel ID.")
+                          description="Set task/event update channel ID.")
     @app_commands.describe(channel_id="Channel ID to post daily reminders to. (all digits, no #)")
     async def setdailychannel(self, interaction: discord.Interaction, channel_id: str):
         self.report_channel_id = int(channel_id)
@@ -636,59 +638,27 @@ class NotionCog(commands.Cog):
     async def before_daily_report(self):
         await self.bot.wait_until_ready()
 
-    # daily report task run every day at self.daily_scheduled_time
-    # @tasks.loop(hours=1)
-    # async def hourly_event_update(self):
-    #     # TODO
-    #     await self.eventsync()
-    #     try:
-    #         now = self.current_time()
-    #         if (now.hour > self.daily_scheduled_time["hour"] or
-    #            (now.hour == self.daily_scheduled_time["hour"] and now.minute >= self.daily_scheduled_time["minute"])):
-    #             if self.last_run_date is None or self.last_run_date != now.date():
-    #                 self.last_run_date = now.date()  # Prevent repeat runs that day
-    #                 sync_object(self.last_run_date, self.last_run_date_filename)
-    #                 try:
-    #                     channel = self.bot.get_channel(self.report_channel_id)
-    #                 except Exception as e:
-    #                     print(f"Channel ID not found: {e}")
-    #                     return
+    # Hourly sync events from notion, using self.sync_notion_events
+    @tasks.loop(hours=1)
+    async def hourly_event_update(self):
+        try:
+            channel = self.bot.get_channel(self.report_channel_id)
+            guild = channel.guild
+        except Exception as e:
+            print(f"Channel or guild for event update not found: {e}")
+            return
 
-    #                 # Query notion tasks
-    #                 try:
-    #                     response_object = await self.notion_client.databases.query(
-    #                         self.notion_tasks_database_id,
-    #                         filter=self.notion_tasks_filter)
-    #                     assert "results" in response_object, "No results found in the response object"
-    #                 except Exception as e:
-    #                     print(f"Query Notion Tasks Error: {e}")
-    #                     return
+        response_string = "(Hourly event sync:)\n" + await self.sync_bot_events(guild)
 
-    #                 task_count, response_string = self.fetch_notion_tasks_summary(response_object)
-    #                 # Follow up message
-    #                 if task_count == 0:
-    #                     return
-
-    #                 try:
-    #                     paginator = commands.Paginator(prefix="", suffix="")
-    #                     for line in response_string.splitlines():
-    #                         paginator.add_line(line)
-    #                     for chunk in paginator.pages:
-    #                         await channel.send(chunk)
-    #                 except Exception as e:
-    #                     print(f"Error while sending response: {e}")
-    #                     await channel.send("An error occurred while sending response.")
-    #     except Exception as e:
-    #         print(f"Error while executing daily report: {e}")
-
-    # 	paginator = commands.Paginator(prefix="", suffix="")
-    # 	for line in response_string.splitlines():
-    # 		paginator.add_line(line)
-    # 	for chunk in paginator.pages:
-    # 		await channel.send(chunk)
+        paginator = commands.Paginator(prefix="", suffix="")
+        for line in response_string.splitlines():
+            paginator.add_line(line)
+        for chunk in paginator.pages:
+            await channel.send(chunk)
 
     # Parse notion people page into {name: Str (display name), notion: Str (user id), discord: Str (tag)}
     # or None if failed
+    # TODO: currently unused, maybe hook it up for discord pings with notion username?
     def parse_notion_people_page(self, page):
         try:
             name = self.parse_rich_text(page["properties"]["Display Name"]["rich_text"])
@@ -704,28 +674,3 @@ class NotionCog(commands.Cog):
         except Exception as e:
             print(f"Error parsing Notion people page: {e}")
             return None
-
-    # Parse people database command
-    @app_commands.command(name="listpeople",
-                          description="Fetch and parse the Committee Details Database.")
-    async def listpeople(self, interaction: discord.Interaction):
-        # Usually takes some time, so defers interaction
-        await interaction.response.defer()
-        response_string = "List people OK"
-
-        # Query notion people database
-        try:
-            response_object = await self.notion_client.databases.query(
-                self.notion_people_database_id)
-            assert "results" in response_object, "No results found in the response object"
-        except Exception as e:
-            print(f"Notion fetching Error: {e}")
-            await interaction.followup.send("Failed to query Notion Committee Database, with .env database id and filters.")
-            return
-
-        # Parse People Database
-        for page in response_object["results"]:
-            parsed_page = self.parse_notion_people_page(page)
-            print(parsed_page)
-
-        await interaction.followup.send(response_string)
