@@ -186,7 +186,7 @@ class MsgQueueCog(commands.Cog):
             "You must be an **administrator** to use this command.",
             ephemeral=True
         )
-        return
+            return
 
         if user.id not in self.authorised_users:
             self.authorised_users.append(user.id)
@@ -211,7 +211,7 @@ class MsgQueueCog(commands.Cog):
             "You must be an **administrator** to use this command.",
             ephemeral=True
         )
-        return
+            return
 
         if user.id in self.authorised_users:
             self.authorised_users.remove(user.id)
