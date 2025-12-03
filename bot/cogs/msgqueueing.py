@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 
-from bot.memory import load_object, sync_object
+from bot.utils.memory import load_object, sync_object
 from enum import Enum
 
 MAX_MSGN_DISPLAY = 5

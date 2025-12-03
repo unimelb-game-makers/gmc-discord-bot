@@ -11,41 +11,26 @@ from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, \
     notion_tasks_database_id, notion_people_database_id
 from bot.utils.memory import load_object, sync_object
+from bot.utils.notion import NotionConnection
 import requests
 
 class NotionCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.notion_client = AsyncClient(auth=notion_authentication_token)
-        self.notion_events_database_id = notion_events_database_id
-        self.notion_tasks_database_id = notion_tasks_database_id
-        self.notion_people_database_id = notion_people_database_id
+        # Setup notion connection
+        self.notion_connection = NotionConnection(
+            notion_auth_token=notion_authentication_token,
+            events_db_id=notion_events_database_id,
+            tasks_db_id=notion_tasks_database_id,
+            people_db_id=notion_people_database_id
+            )
+        
+        # Setup file management
+
         self.discord_managing_event_names_filename = "discord_managing_event_names.pkl"
         self.discord_managing_event_names = load_object(self.discord_managing_event_names_filename, default_value=[])
-        self.notion_events_filter = {
-            "property": "Public Checkbox",
-            "checkbox": {
-                "equals": True
-            }
-        }
         self.discord_events_thumbnails_filename = "discord_events_thumbnails.pkl"
         self.discord_events_thumbnails = load_object(self.discord_events_thumbnails_filename, default_value={})
-        self.notion_tasks_filter = {
-            "or": [
-                {
-                    "property": "Status",
-                    "status": {
-                        "equals": "In progress"
-                    }
-                },
-                {
-                    "property": "Status",
-                    "status": {
-                        "equals": "Not started"
-                    }
-                }
-            ]
-        }
         self.daily_scheduled_time_filename = "daily_scheduled_time.pkl"
         self.daily_scheduled_time = load_object(self.daily_scheduled_time_filename, default_value={"hour": 10, "minute": 0})
         self.last_run_date_filename = "last_run_date.pkl"
@@ -60,6 +45,16 @@ class NotionCog(commands.Cog):
     def cog_unload(self):
         self.daily_report.cancel()
         self.hourly_event_update.cancel()
+
+    @app_commands.command(name="listevents", description="Lists all events from notion, for testing")
+    async def list_events(self, interaction: discord.Interaction):
+        # Usually takes some time, so defers interaction
+        await interaction.response.defer()
+
+        events = await self.notion_connection.get_events_from_notion()
+
+        print(events)
+    
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
@@ -228,9 +223,7 @@ class NotionCog(commands.Cog):
 
         # Query notion events
         try:
-            response_object = await self.notion_client.databases.query(
-                self.notion_events_database_id,
-                filter=self.notion_events_filter)
+            response_object = await self.notion_connection.get_events_from_notion()
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Notion fetching Error: {e}")
@@ -555,9 +548,7 @@ class NotionCog(commands.Cog):
         # Query notion tasks
         try:
             response_string += "Filtering by status as In progress or Not started.\n"
-            response_object = await self.notion_client.databases.query(
-                self.notion_tasks_database_id,
-                filter=self.notion_tasks_filter)
+            response_object = await self.notion_connection.get_tasks_from_notion()
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Query Notion Tasks Error: {e}")
@@ -608,9 +599,7 @@ class NotionCog(commands.Cog):
 
                     # Query notion tasks
                     try:
-                        response_object = await self.notion_client.databases.query(
-                            self.notion_tasks_database_id,
-                            filter=self.notion_tasks_filter)
+                        response_object = await self.notion_connection.get_tasks_from_notion()
                         assert "results" in response_object, "No results found in the response object"
                     except Exception as e:
                         print(f"Query Notion Tasks Error: {e}")

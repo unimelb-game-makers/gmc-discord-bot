@@ -7,10 +7,10 @@ class NotionConnection:
     """
     NotionConnection class. Used to decouple the notion connection from other classes/cogs.
     """
-    def __init__(self, notion_auth_token, events_db_id="", task_db_id="", people_db_id=""):
+    def __init__(self, notion_auth_token, events_db_id="", tasks_db_id="", people_db_id=""):
         self.notion_client = AsyncClient(auth=notion_auth_token)
         self.events_db_id = events_db_id
-        self.tasks_db_id = task_db_id
+        self.tasks_db_id = tasks_db_id
         self.people_db_id= people_db_id
 
     def set_events_db_id(self, events_db_id):
@@ -60,9 +60,12 @@ class NotionConnection:
                 filter=notion_tasks_completed_filter)
         
         return response_object
+
+    async def get_people_from_notion(self):
+        response_object = await self.notion_client.data_sources.query(
+                self.people_db_id)
         
-
-
+        return response_object
 
 if __name__ == "__main__":
     load_dotenv()
@@ -70,4 +73,3 @@ if __name__ == "__main__":
     notion_connection.set_events_db_id(os.environ["NOTION_EVENTS_DATABASE_ID"])
     notion_connection.set_tasks_db_id(os.environ["NOTION_TASKS_DATABASE_ID"])
     res = asyncio.run(notion_connection.get_tasks_from_notion())
-    print(res)

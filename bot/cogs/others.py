@@ -3,7 +3,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from bot.memory import clear_memory
+from bot.utils.memory import clear_memory
 import pprint
 
 class OthersCog(commands.Cog):
