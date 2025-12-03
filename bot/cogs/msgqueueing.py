@@ -180,13 +180,13 @@ class MsgQueueCog(commands.Cog):
                 description="Authorise a user to use the message queue.")
     @app_commands.describe(user="Select a user to authorise.")
     async def addauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
-        # # only allow server admin to use this command
-        # if not interaction.user.guild_permissions.administrator:
-        #     await interaction.response.send_message(
-        #     "You must be an **administrator** to use this command.",
-        #     ephemeral=True
-        # )
-        # return
+        # only allow server admin to use this command
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+            "You must be an **administrator** to use this command.",
+            ephemeral=True
+        )
+        return
 
         if user.id not in self.authorised_users:
             self.authorised_users.append(user.id)
@@ -205,14 +205,13 @@ class MsgQueueCog(commands.Cog):
                 description="Remove a user from authorized list for message queue")
     @app_commands.describe(user="Select a user to remove.")
     async def removeauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
-        # TODO: Re-enable admin-only restriction after testing
-        # # only allow server admin to use this command
-        # if not interaction.user.guild_permissions.administrator:
-        #     await interaction.response.send_message(
-        #     "You must be an **administrator** to use this command.",
-        #     ephemeral=True
-        # )
-        # return
+        # only allow server admin to use this command
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+            "You must be an **administrator** to use this command.",
+            ephemeral=True
+        )
+        return
 
         if user.id in self.authorised_users:
             self.authorised_users.remove(user.id)
