@@ -10,7 +10,7 @@ from discord import app_commands
 from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, \
     notion_tasks_database_id, notion_people_database_id
-from bot.memory import load_object, sync_object
+from bot.utils.memory import load_object, sync_object
 import requests
 
 class NotionCog(commands.Cog):
