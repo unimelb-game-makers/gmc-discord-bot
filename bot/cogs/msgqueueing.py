@@ -10,12 +10,14 @@ from discord import Interaction
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-
+ 
 from bot.memory import load_object, sync_object
 from enum import Enum
 
 MAX_MSGN_DISPLAY = 5
 MSG_MEMORY_PATH = "message_queue.pkl"
+AUTH_USERS_PATH = "authorised_users.pkl"
+
 
 # enum for msg job status
 class JobStatus(str, Enum):
@@ -27,7 +29,7 @@ class MsgQueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # keys of dict: [{id, channel_id, message, due_utc, status, author_id}]
-        self.jobs: list[dict] = []   
+        self.jobs: list[dict] = []
         self._next_id = 1
         self.queue_filename = MSG_MEMORY_PATH
         state = load_object(self.queue_filename, default_value={"jobs": [], "next_id": 1})
@@ -40,6 +42,9 @@ class MsgQueueCog(commands.Cog):
         except Exception as e:
             print(f"[msgqueue] load failed, starting fresh: {e}")
         self.check_jobs.start()
+        self.authorised_users = load_object(AUTH_USERS_PATH)
+        if self.authorised_users is None:
+            self.authorised_users = []
 
     # Send message at scheduled time
     @app_commands.command(name="messagequeuing",
@@ -55,14 +60,18 @@ class MsgQueueCog(commands.Cog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         message: str,
-        date: Optional[str] = None,      
+        date: Optional[str] = None,
         time_hm: Optional[str] = None,
     ):
+        if interaction.user.id not in self.authorised_users:
+            return await interaction.response.send_message(
+            "(X) You don’t have permission to schedule messages here.", ephemeral=True
+        )
         try:
             if date and time_hm:
                 local_dt = self.parse_time_string(f"{date}T{time_hm}")
             elif time_hm:
-                local_dt = self.next_occurrence_hm_local(time_hm)  
+                local_dt = self.next_occurrence_hm_local(time_hm)
             elif date:
                 local_dt = self.parse_time_string(date)
             else:
@@ -102,7 +111,7 @@ class MsgQueueCog(commands.Cog):
             cand += timedelta(days=1)
         return cand
 
-    # save current queue state 
+    # save current queue state
     def _save_state(self):
         try:
             sync_object({"jobs": self.jobs, "next_id": self._next_id}, self.queue_filename)
@@ -118,7 +127,7 @@ class MsgQueueCog(commands.Cog):
     @tasks.loop(minutes=1)
     async def check_jobs(self):
         now_utc = datetime.now(pytz.utc)
-        due = [j for j in self.jobs if j["status"] == JobStatus.PENDING and j["due_utc"] <= now_utc] 
+        due = [j for j in self.jobs if j["status"] == JobStatus.PENDING and j["due_utc"] <= now_utc]
         for job in due:
             ch = self.bot.get_channel(job["channel_id"])
             if isinstance(ch, discord.TextChannel):
@@ -126,22 +135,26 @@ class MsgQueueCog(commands.Cog):
                     sender_label = ""
                     author_id = job.get("author_id")
                     sender_label = f"<@{author_id}>"
-                    
-                    await ch.send(f"{sender_label}: {job['message']}")  
-                    job["status"] = JobStatus.SENT   
+
+                    await ch.send(f"{sender_label}: {job['message']}")
+                    job["status"] = JobStatus.SENT
                 except Exception:
-                    job["status"] = JobStatus.ERROR  
+                    job["status"] = JobStatus.ERROR
                 finally:
                     self._save_state()
- 
-    # Print out first 5 schedule messages need to be sent 
-    @app_commands.command(name="checkmessagequeue", 
+
+    # Print out first 5 schedule messages need to be sent
+    @app_commands.command(name="checkmessagequeue",
                         description=" Print out all schedule messages need to be sent")
     async def check_message_queue(self, interaction):
+        if interaction.user.id not in self.authorised_users:
+            return await interaction.response.send_message(
+            "(X) You don’t have permission to check messages scheduled here.", ephemeral=True
+        )
         now_utc = datetime.now(pytz.utc)
 
         # store all pending msgs
-        pending = [j for j in self.jobs if j["status"] == JobStatus.PENDING] 
+        pending = [j for j in self.jobs if j["status"] == JobStatus.PENDING]
         if not pending:
             return await interaction.response.send_message("No pending messages in queue.", ephemeral=True)
 
@@ -151,7 +164,7 @@ class MsgQueueCog(commands.Cog):
 
         msgN = min(MAX_MSGN_DISPLAY, len(pending))
         lines = [f"Showing next {msgN} of {len(pending)} pending messages:"]
-        for j in pending[:MAX_MSGN_DISPLAY]:  
+        for j in pending[:MAX_MSGN_DISPLAY]:
             local_dt = j["due_utc"].astimezone(mel)
             ts = self.datetime_to_discord_short_datetime(local_dt)
             author = f"<@{j['author_id']}>" if j.get("author_id") else "someone"
@@ -162,6 +175,55 @@ class MsgQueueCog(commands.Cog):
 
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
+    # Server admin authorises a user to use the message queue
+    @app_commands.command(name="addauthorizeduser",
+                description="Authorise a user to use the message queue.")
+    @app_commands.describe(user="Select a user to authorise.")
+    async def addauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
+        # only allow server admin to use this command
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+            "You must be an **administrator** to use this command.",
+            ephemeral=True
+        )
+            return
+
+        if user.id not in self.authorised_users:
+            self.authorised_users.append(user.id)
+            sync_object(self.authorised_users, AUTH_USERS_PATH)
+            await interaction.response.send_message(
+                f"Authorised **{user.mention}** to use message queue."
+            )
+        else:
+            await interaction.response.send_message(
+                f"{user.mention} is already authorised.",
+                ephemeral=True
+            )
+
+    # Server admin removes a user from authorized list for message queue
+    @app_commands.command(name="removeauthorizeduser",
+                description="Remove a user from authorized list for message queue")
+    @app_commands.describe(user="Select a user to remove.")
+    async def removeauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
+        # only allow server admin to use this command
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+            "You must be an **administrator** to use this command.",
+            ephemeral=True
+        )
+            return
+
+        if user.id in self.authorised_users:
+            self.authorised_users.remove(user.id)
+            sync_object(self.authorised_users, AUTH_USERS_PATH)
+            await interaction.response.send_message(
+                f"Remove **{user.mention}** from authorized list."
+            )
+        else:
+            await interaction.response.send_message(
+                f"{user.mention} is not on the authorized list yet.",
+                ephemeral=True
+            )
 
 
     # ----- helpers for time parsing from notion.py -----
@@ -183,7 +245,7 @@ class MsgQueueCog(commands.Cog):
                 dt = pytz.timezone(default_timezone).localize(dt)
 
         return dt
-    
+
     def current_time(self, default_timezone="Australia/Melbourne"):
         return datetime.now(pytz.timezone(default_timezone))
 

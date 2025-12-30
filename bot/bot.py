@@ -13,7 +13,7 @@ from bot.memory import remove_all_filelocks
 from bot.cogs.msgqueueing import MsgQueueCog
 
 def run():
-    
+
     # Remove filelocks
     remove_all_filelocks()
 
@@ -22,7 +22,7 @@ def run():
     intents.message_content = True
 
     bot = commands.Bot(command_prefix='/', intents=intents)
-    
+
     # Dynamically load cogs: itch, notion, ai, and others from './bot/cogs' when ready
     @bot.event
     async def on_ready():
@@ -32,8 +32,6 @@ def run():
         await bot.add_cog(AiCog(bot))
         await bot.add_cog(MsgQueueCog(bot))
         await bot.tree.sync()
-
-
         print("Bot ready!")
 
     # Setup resync command.
