@@ -1,8 +1,10 @@
 python-dotenv
 discord.py
-notion-client
+notion-client==2.0.0
 python-dateutil
 pytz
 openai
 filelock
 requests
+beautifulsoup4
+pytz

@@ -8,7 +8,7 @@ import re
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-from bot.memory import save_jam_data, load_jam_data, clear_jam_data, save, load
+from bot.utils.memory import save_jam_data, load_jam_data, clear_jam_data, save, load
 from openai import OpenAI
 from bot.config import openrouter_api_key
 
