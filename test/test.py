@@ -36,7 +36,7 @@ async def test_notion_query_task_parse():
     notion_client = AsyncClient(auth=notion_authentication_token)
 
     response_object = await notion_client.databases.query(
-        database_id=notion_tasks_database_id,
+        notion_tasks_database_id,
         filter={
             "or": [
                 {
@@ -63,7 +63,7 @@ async def test_notion_query_people_parse():
     notion_client = AsyncClient(auth=notion_authentication_token)
 
     response_object = await notion_client.databases.query(
-        database_id=notion_people_database_id)
+        notion_people_database_id)
 
     print("People database result:")
     for page in response_object["results"]:
