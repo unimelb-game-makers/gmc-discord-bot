@@ -7,7 +7,6 @@ import pytz
 import re
 from discord.ext import commands, tasks
 from discord import app_commands
-from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, \
     notion_tasks_database_id, notion_people_database_id
 from bot.utils.memory import load_object, sync_object
@@ -24,7 +23,7 @@ class NotionCog(commands.Cog):
             tasks_db_id=notion_tasks_database_id,
             people_db_id=notion_people_database_id
             )
-        
+
         # Setup file management
 
         self.discord_managing_event_names_filename = "discord_managing_event_names.pkl"
@@ -54,7 +53,7 @@ class NotionCog(commands.Cog):
         events = await self.notion_connection.get_events_from_notion()
 
         print(events)
-    
+
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):

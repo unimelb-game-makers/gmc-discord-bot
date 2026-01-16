@@ -1,4 +1,4 @@
-from notion_client import AsyncClient, Client
+from notion_client import AsyncClient
 import os
 import asyncio
 from dotenv import load_dotenv
@@ -36,7 +36,7 @@ class NotionConnection:
         )
 
         return response_object
-    
+
     async def get_tasks_from_notion(self):
         notion_tasks_completed_filter = {
             "or": [
@@ -58,13 +58,13 @@ class NotionConnection:
         response_object = await self.notion_client.data_sources.query(
                 self.tasks_db_id,
                 filter=notion_tasks_completed_filter)
-        
+
         return response_object
 
     async def get_people_from_notion(self):
         response_object = await self.notion_client.data_sources.query(
                 self.people_db_id)
-        
+
         return response_object
 
 if __name__ == "__main__":
