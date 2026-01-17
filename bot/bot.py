@@ -9,7 +9,7 @@ from bot.cogs.itch import ItchCog
 from bot.cogs.notion import NotionCog
 from bot.cogs.others import OthersCog
 from bot.cogs.ai import AiCog
-from bot.memory import remove_all_filelocks
+from bot.utils.memory import remove_all_filelocks
 from bot.cogs.msgqueueing import MsgQueueCog
 
 def run():
