@@ -33,14 +33,28 @@ jobs:
             echo "Starting deployment..."
             echo "========================================="
 
-            # Navigate to project directory
-            cd /root/gmc-discord-bot || {
-              echo "Error: Project directory not found"
-              exit 1
-            }
+            # Check if project directory exists
+            if [ ! -d "/root/gmc-discord-bot" ]; then
+              echo "Project directory not found. Cloning repository..."
+              cd /root
+              git clone https://github.com/unimelb-game-makers/gmc-discord-bot.git
+              cd gmc-discord-bot
 
-            echo "Pulling latest changes from repository..."
-            git pull origin main
+              echo "Creating working_memory directory..."
+              mkdir -p working_memory
+
+              echo ""
+              echo "WARNING: .env file not found!"
+              echo "Please create /root/gmc-discord-bot/.env with your credentials"
+              echo "Deployment will continue but bot may fail to start without .env"
+              echo ""
+            else
+              echo "Project directory found. Updating..."
+              cd /root/gmc-discord-bot
+
+              echo "Pulling latest changes from repository..."
+              git pull origin main
+            fi
 
             echo "Stopping existing containers..."
             docker compose down || true
