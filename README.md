@@ -16,11 +16,16 @@ Custom python discord bot for UMGMC discord
 
 ### Using Docker
 
-- Ensure docker is installed and docker engine is active
-- Clone respository
-- Setup .env environment file
-- Type ```docker build -t gmc-discord-bot .``` to build the docker image
-- Type ```docker run gmc-discord-bot``` to run the image as a container.
+- Ensure docker and docker compose are installed and docker engine is active
+- Clone repository
+- Setup .env environment file (see `.env.example` for template)
+- Type ```docker compose up -d``` to build and run the container in detached mode
+- Type ```docker compose logs -f``` to view logs
+- Type ```docker compose down``` to stop the container
+
+### Automated Deployment to DigitalOcean
+
+For production deployment with automated CI/CD, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Notion features
 
