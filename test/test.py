@@ -38,7 +38,7 @@ async def test_notion_query_task_parse():
             tasks_db_id=notion_tasks_database_id,
             people_db_id=notion_people_database_id)
 
-    response_object = notion.get_tasks_from_notion()
+    response_object = await notion.get_tasks_from_notion()
 
     print("Task result:")
     for page in response_object["results"]:
@@ -52,7 +52,7 @@ async def test_notion_query_event_parse():
             tasks_db_id=notion_tasks_database_id,
             people_db_id=notion_people_database_id)
 
-    response_object = notion.get_events_from_notion()
+    response_object = await notion.get_events_from_notion()
 
     print("Event database result:")
     for page in response_object["results"]:

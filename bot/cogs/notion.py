@@ -45,15 +45,6 @@ class NotionCog(commands.Cog):
         self.daily_report.cancel()
         self.hourly_event_update.cancel()
 
-    @app_commands.command(name="listevents", description="Lists all events from notion, for testing")
-    async def list_events(self, interaction: discord.Interaction):
-        # Usually takes some time, so defers interaction
-        await interaction.response.defer()
-
-        events = await self.notion_connection.get_events_from_notion()
-
-        print(events)
-
 
     # Parse notion time string to datetime object
     def parse_time_string(self, time_str: str, default_hour = 0, default_minute = 0, default_timezone="Australia/Melbourne"):
@@ -115,8 +106,8 @@ class NotionCog(commands.Cog):
     # or None if failed
     def parse_notion_event_page(self, page):
         try:
-            event_name = self.parse_rich_text(page["properties"]["Public Name"]["rich_text"])
-            event_date_object = page["properties"]["Event Date"]["date"]
+            event_name = self.parse_rich_text(page["properties"]["Event Name"]["title"])
+            event_date_object = page["properties"]["Date"]["date"]
             event_start_time_str = event_date_object["start"]
             event_end_time_str = event_date_object["end"]
             event_start_time_dt = self.parse_time_string(event_start_time_str)
@@ -124,9 +115,7 @@ class NotionCog(commands.Cog):
                 event_end_time_dt = self.parse_time_string(event_end_time_str, 23, 59)
             else:
                 event_end_time_dt = self.parse_time_string(event_start_time_str, 23, 59) + timedelta(minutes=1)
-            # Public description seems to be removed from event database? For now just use empty string
-            # event_description = self.parse_rich_text(page["properties"]["Public Description"]["rich_text"])
-            event_description = ""
+            event_description = self.parse_rich_text(page["properties"]["Description"]["rich_text"])
             if len(page["properties"]["Venue"]["rich_text"]) > 0:
                 event_venue = self.parse_rich_text(page["properties"]["Venue"]["rich_text"])
             else:
@@ -392,20 +381,18 @@ class NotionCog(commands.Cog):
     # Returns None if failed to parse or lack critical info
     def parse_notion_task_page(self, page):
         try:
-            task_name = self.parse_rich_text(page["properties"]["Task"]["title"])
-            task_date_object = page["properties"]["Due"]["date"]
+            task_name = self.parse_rich_text(page["properties"]["Task Name"]["title"])
+            task_date_object = page["properties"]["Due Date"]["date"]
             if task_date_object is None:
                 return None
             task_due_time_str = task_date_object["start"]
             if task_date_object["end"] is not None:
                 task_due_time_str = task_date_object["end"]
             task_due_time_dt = self.parse_time_string(task_due_time_str, 21, 0)
-            task_related_team = [tag["name"] for tag in page["properties"]["Team"]["multi_select"]]
             task_assignee = [person["name"] for person in page["properties"]["Assignee"]["people"]]
             task_status = page["properties"]["Status"]["status"]["name"]
-            task_related_project = self.parse_ids_to_url([project["id"] for project in page["properties"]["Project"]["relation"]])
-            return {"name": task_name, "due_time": task_due_time_dt, "related_teams": task_related_team,
-            "assignee": task_assignee, "status": task_status, "related_project": task_related_project}
+            return {"name": task_name, "due_time": task_due_time_dt,
+            "assignee": task_assignee, "status": task_status}
         except Exception as e:
             print(f"Error parsing Notion task page: {e}")
             return None
@@ -474,17 +461,15 @@ class NotionCog(commands.Cog):
                 continue
             task_name = page_parsed["name"]
             task_date_object = page_parsed["due_time"]
-            task_related_teams = page_parsed["related_teams"]
             task_assignee = page_parsed["assignee"]
             task_status = page_parsed["status"]
-            task_related_project = page_parsed["related_project"]
 
             if task_date_object.date() != self.current_time().date():
                 continue
 
-            ping_string = " ".join([self.mask_name(name) for name in (task_assignee + task_related_teams)]) + "\n"
+            ping_string = " ".join([self.mask_name(name) for name in (task_assignee)]) + "\n"
 
-            response_string_success += "- " + task_name + " (" + task_status + ") " + task_related_project + " | " + ping_string
+            response_string_success += "- " + task_name + " (" + task_status + ") " + " | " + ping_string
             task_count += 1
         return (task_count, response_string_success)
 

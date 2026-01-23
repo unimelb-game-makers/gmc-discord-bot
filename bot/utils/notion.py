@@ -23,16 +23,8 @@ class NotionConnection:
         self.people_db_id = people_db_id
 
     async def get_events_from_notion(self):
-        notion_events_public_filter = {
-            "property": "Public Checkbox",
-            "checkbox": {
-                "equals": True
-            }
-        }
-
         response_object = await self.notion_client.data_sources.query(
-            self.events_db_id,
-            filter=notion_events_public_filter
+            self.events_db_id
         )
 
         return response_object
