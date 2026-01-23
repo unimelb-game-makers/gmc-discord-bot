@@ -3,7 +3,7 @@ name: Deploy to DigitalOcean
 on:
   push:
     branches:
-      - do
+      - main
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
               cd /root/gmc-discord-bot
 
               echo "Pulling latest changes from repository..."
-              git pull origin do
+              git pull origin main
             fi
 
             echo "Stopping existing containers..."
