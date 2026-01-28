@@ -1,0 +1,104 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DROPLET_IP }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Droplet
+        env:
+          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DROPLET_USER: root
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'ENDSSH'
+            set -e
+
+            echo "========================================="
+            echo "Starting deployment..."
+            echo "========================================="
+
+            # Check if project directory exists
+            if [ ! -d "/root/gmc-discord-bot" ]; then
+              echo "Project directory not found. Cloning repository..."
+              cd /root
+              git clone https://github.com/unimelb-game-makers/gmc-discord-bot.git
+              cd gmc-discord-bot
+
+              echo "Creating working_memory directory..."
+              mkdir -p working_memory
+
+              echo ""
+              echo "WARNING: .env file not found!"
+              echo "Please create /root/gmc-discord-bot/.env with your credentials"
+              echo "Deployment will continue but bot may fail to start without .env"
+              echo ""
+            else
+              echo "Project directory found. Updating..."
+              cd /root/gmc-discord-bot
+
+              echo "Pulling latest changes from repository..."
+              git pull origin main
+            fi
+
+            echo "Stopping existing containers..."
+            docker compose down || true
+
+            echo "Building Docker image..."
+            docker compose build
+
+            echo "Starting containers..."
+            docker compose up -d
+
+            echo "Waiting for container to start..."
+            sleep 5
+
+            echo "========================================="
+            echo "Container status:"
+            echo "========================================="
+            docker compose ps
+
+            echo ""
+            echo "========================================="
+            echo "Recent logs (last 50 lines):"
+            echo "========================================="
+            docker compose logs --tail=50
+
+            echo ""
+            echo "========================================="
+            echo "Health check:"
+            echo "========================================="
+            if docker compose ps | grep -q "Up"; then
+              echo "✓ Container is running"
+              exit 0
+            else
+              echo "✗ Container is not running properly"
+              docker compose logs --tail=100
+              exit 1
+            fi
+          ENDSSH
+
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✓ Deployment successful!"
+          else
+            echo "✗ Deployment failed!"
+            exit 1
+          fi
