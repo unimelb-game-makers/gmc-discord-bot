@@ -1,9 +1,8 @@
 # Test module, defines tests
 
-import logging
-from notion_client import AsyncClient
 from bot.config import notion_authentication_token, notion_events_database_id, \
     notion_tasks_database_id, notion_people_database_id
+from bot.utils.notion import NotionConnection
 import pprint
 import requests
 
@@ -33,41 +32,29 @@ async def test_notion_available_databases():
         print("Error:", response.status_code, response.text)
 
 async def test_notion_query_task_parse():
-    notion_client = AsyncClient(auth=notion_authentication_token)
+    notion = NotionConnection(
+            notion_auth_token=notion_authentication_token,
+            events_db_id=notion_events_database_id,
+            tasks_db_id=notion_tasks_database_id,
+            people_db_id=notion_people_database_id)
 
-    response_object = await notion_client.databases.query(
-        notion_tasks_database_id,
-        filter={
-            "or": [
-                {
-                    "property": "Status",
-                    "status": {
-                        "equals": "In progress"
-                    }
-                },
-                {
-                    "property": "Status",
-                    "status": {
-                        "equals": "Not started"
-                    }
-                }
-            ]
-        })
+    response_object = await notion.get_tasks_from_notion()
 
     print("Task result:")
     for page in response_object["results"]:
         pprint.pprint(page)
         print("")
 
-async def test_notion_query_people_parse():
-    notion_client = AsyncClient(auth=notion_authentication_token)
+async def test_notion_query_event_parse():
+    notion = NotionConnection(
+            notion_auth_token=notion_authentication_token,
+            events_db_id=notion_events_database_id,
+            tasks_db_id=notion_tasks_database_id,
+            people_db_id=notion_people_database_id)
 
-    response_object = await notion_client.databases.query(
-        notion_people_database_id)
+    response_object = await notion.get_events_from_notion()
 
-    print("People database result:")
+    print("Event database result:")
     for page in response_object["results"]:
-        print("Person:")
-        pprint.pprint(page["properties"]["Display Name"])
-        pprint.pprint(page["properties"]["Notion Account"]["people"])
-        pprint.pprint(page["properties"]["Discord"])
+        pprint.pprint(page)
+        print("")
