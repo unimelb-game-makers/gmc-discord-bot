@@ -21,6 +21,26 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DROPLET_IP }} >> ~/.ssh/known_hosts
 
+      - name: Write .env to Droplet
+        env:
+          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DROPLET_USER: root
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          NOTION_AUTHENTICATION_TOKEN: ${{ secrets.NOTION_AUTHENTICATION_TOKEN }}
+          NOTION_EVENTS_DATABASE_ID: ${{ secrets.NOTION_EVENTS_DATABASE_ID }}
+          NOTION_TASKS_DATABASE_ID: ${{ secrets.NOTION_TASKS_DATABASE_ID }}
+          NOTION_PEOPLE_DATABASE_ID: ${{ secrets.NOTION_PEOPLE_DATABASE_ID }}
+        run: |
+          cat > /tmp/deploy.env << EOF
+          DISCORD_TOKEN=${DISCORD_BOT_TOKEN}
+          NOTION_AUTHENTICATION_TOKEN=${NOTION_AUTHENTICATION_TOKEN}
+          NOTION_EVENTS_DATABASE_ID=${NOTION_EVENTS_DATABASE_ID}
+          NOTION_TASKS_DATABASE_ID=${NOTION_TASKS_DATABASE_ID}
+          NOTION_PEOPLE_DATABASE_ID=${NOTION_PEOPLE_DATABASE_ID}
+          EOF
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "mkdir -p /root/gmc-discord-bot"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no /tmp/deploy.env $DROPLET_USER@$DROPLET_IP:/root/gmc-discord-bot/.env
+
       - name: Deploy to Droplet
         env:
           DROPLET_IP: ${{ secrets.DROPLET_IP }}
@@ -42,12 +62,6 @@ jobs:
 
               echo "Creating working_memory directory..."
               mkdir -p working_memory
-
-              echo ""
-              echo "WARNING: .env file not found!"
-              echo "Please create /root/gmc-discord-bot/.env with your credentials"
-              echo "Deployment will continue but bot may fail to start without .env"
-              echo ""
             else
               echo "Project directory found. Updating..."
               cd /root/gmc-discord-bot
