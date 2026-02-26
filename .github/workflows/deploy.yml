@@ -30,6 +30,7 @@ jobs:
           NOTION_EVENTS_DATABASE_ID: ${{ secrets.NOTION_EVENTS_DATABASE_ID }}
           NOTION_TASKS_DATABASE_ID: ${{ secrets.NOTION_TASKS_DATABASE_ID }}
           NOTION_PEOPLE_DATABASE_ID: ${{ secrets.NOTION_PEOPLE_DATABASE_ID }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           cat > /tmp/deploy.env << EOF
           DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
@@ -37,6 +38,7 @@ jobs:
           NOTION_EVENTS_DATABASE_ID=${NOTION_EVENTS_DATABASE_ID}
           NOTION_TASKS_DATABASE_ID=${NOTION_TASKS_DATABASE_ID}
           NOTION_PEOPLE_DATABASE_ID=${NOTION_PEOPLE_DATABASE_ID}
+          OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
           EOF
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "mkdir -p /root/gmc-discord-bot"
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no /tmp/deploy.env $DROPLET_USER@$DROPLET_IP:/root/gmc-discord-bot/.env
