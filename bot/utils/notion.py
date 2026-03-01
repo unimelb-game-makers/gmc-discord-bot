@@ -1,6 +1,7 @@
 from notion_client import AsyncClient
 import os
 import asyncio
+from datetime import date
 from dotenv import load_dotenv
 
 class NotionConnection:
@@ -23,8 +24,26 @@ class NotionConnection:
         self.people_db_id = people_db_id
 
     async def get_events_from_notion(self):
+        notion_events_filter = {
+            "and": [
+                {
+                    "property": "Is ready for public",
+                    "checkbox": {
+                        "equals": True
+                    }
+                },
+                {
+                    "property": "Date",
+                    "date": {
+                        "on_or_after": date.today().isoformat()
+                    }
+                }
+            ]
+        }
+
         response_object = await self.notion_client.data_sources.query(
-            self.events_db_id
+            self.events_db_id,
+            filter=notion_events_filter
         )
 
         return response_object
