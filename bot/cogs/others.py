@@ -22,6 +22,7 @@ class OthersCog(commands.Cog):
 
     # Clear all memory files
     @app_commands.command(name="clearmemory", description="Clear all memory files.")
+    @app_commands.default_permissions(administrator=True)
     async def clearmemory(self, interaction: discord.Interaction):
         response_string = clear_memory()
         response_string = "Clearing memory files:\n" + response_string

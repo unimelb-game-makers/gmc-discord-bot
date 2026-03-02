@@ -26,10 +26,10 @@ def run():
     # Dynamically load cogs: itch, notion, ai, and others from './bot/cogs' when ready
     @bot.event
     async def on_ready():
-        await bot.add_cog(ItchCog(bot))
+        # await bot.add_cog(ItchCog(bot))
         await bot.add_cog(NotionCog(bot))
         await bot.add_cog(OthersCog(bot))
-        await bot.add_cog(AiCog(bot))
+        # await bot.add_cog(AiCog(bot))
         await bot.add_cog(MsgQueueCog(bot))
         await bot.tree.sync()
         print("Bot ready!")
