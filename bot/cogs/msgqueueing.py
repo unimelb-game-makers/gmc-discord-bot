@@ -178,6 +178,7 @@ class MsgQueueCog(commands.Cog):
     # Server admin authorises a user to use the message queue
     @app_commands.command(name="addauthorizeduser",
                 description="Authorise a user to use the message queue.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(user="Select a user to authorise.")
     async def addauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
         # only allow server admin to use this command
@@ -203,6 +204,7 @@ class MsgQueueCog(commands.Cog):
     # Server admin removes a user from authorized list for message queue
     @app_commands.command(name="removeauthorizeduser",
                 description="Remove a user from authorized list for message queue")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(user="Select a user to remove.")
     async def removeauthorizeduser(self, interaction: discord.Interaction, user: discord.User):
         # only allow server admin to use this command
