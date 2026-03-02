@@ -159,6 +159,7 @@ class NotionCog(commands.Cog):
     # Clear all discord event memory
     @app_commands.command(name="cleardiscordeventsmemory",
         description="Clear memory for what discord events the bot is managing. Keyed by discord event name.")
+    @app_commands.default_permissions(administrator=True)
     async def cleardiscordeventsmemory(self, interaction: discord.Interaction):
         self.discord_managing_event_names = []
         sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
@@ -169,6 +170,7 @@ class NotionCog(commands.Cog):
 
     # Remove all discord events created by the bot
     @app_commands.command(name="clearbotevents", description="Delete all scheduled events created by the bot userid.")
+    @app_commands.default_permissions(administrator=True)
     async def clear_bot_events(self, interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -347,6 +349,7 @@ class NotionCog(commands.Cog):
     # Also keeps memory of what discord events are managed by the bot!
     @app_commands.command(name="eventsync",
                           description="Update events from Notion to discord.")
+    @app_commands.default_permissions(administrator=True)
     async def eventsync(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
         await interaction.response.defer()
@@ -400,6 +403,7 @@ class NotionCog(commands.Cog):
     # Display name masks
     @app_commands.command(name="listnamemask",
                           description="List the current name mask for pinging correct users in daily reports.")
+    @app_commands.default_permissions(administrator=True)
     async def listnamemask(self, interaction: discord.Interaction):
         response_string = "Current name masks:\n"
         if len(list(self.name_masks.items())) == 0:
@@ -422,6 +426,7 @@ class NotionCog(commands.Cog):
     # Add or update the name mask
     @app_commands.command(name="addnamemask",
                           description="Add or update a name mask for pinging correct users in daily reports.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         name="Raw name as fetched from Notion",
         masked_name="Masked name, for example @user_id. If masked to \"remove\", entry is removed."
@@ -476,6 +481,7 @@ class NotionCog(commands.Cog):
     # Current time command
     @app_commands.command(name="currenttime",
                           description="Name current time in discord format.")
+    @app_commands.default_permissions(administrator=True)
     async def currenttime(self, interaction: discord.Interaction):
         response_string = "Current time: " + self.datetime_to_discord_short_datetime(self.current_time())
         await interaction.response.send_message(response_string)
@@ -483,6 +489,7 @@ class NotionCog(commands.Cog):
     # Format time command
     @app_commands.command(name="formattime",
                           description="Name time in discord format.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         hours="Hour of the day (0–23)",
         minutes="Minute of the hour (0–59)"
@@ -503,6 +510,7 @@ class NotionCog(commands.Cog):
     # Set daily schedule time command
     @app_commands.command(name="setdailytime",
                           description="Set daily scheduled reminders time.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         hours="Hour of the day (0–23)",
         minutes="Minute of the hour (0–59)"
@@ -524,6 +532,7 @@ class NotionCog(commands.Cog):
     # Setup the task fetch command
     @app_commands.command(name="listtasks",
                           description="List tasks with due dates set as today from Notion.")
+    @app_commands.default_permissions(administrator=True)
     async def listtasks(self, interaction: discord.Interaction):
         # Usually takes some time, so defers interaction
         await interaction.response.defer()
@@ -559,6 +568,7 @@ class NotionCog(commands.Cog):
     # Set daily schedule channel id
     @app_commands.command(name="setdailychannel",
                           description="Set task/event update channel ID.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(channel_id="Channel ID to post daily reminders to. (all digits, no #)")
     async def setdailychannel(self, interaction: discord.Interaction, channel_id: str):
         self.report_channel_id = int(channel_id)
