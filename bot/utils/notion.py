@@ -38,7 +38,7 @@ class NotionConnection:
                     }
                 },
                 {
-                    "property": "Date",
+                    "property": "Public Date",
                     "date": {
                         "on_or_after": date.today().isoformat()
                     }

@@ -107,7 +107,7 @@ class NotionCog(commands.Cog):
     def parse_notion_event_page(self, page):
         try:
             event_name = self.parse_rich_text(page["properties"]["Event Name"]["title"])
-            event_date_object = page["properties"]["Date"]["date"]
+            event_date_object = page["properties"]["Public Date"]["date"]
             event_start_time_str = event_date_object["start"]
             event_end_time_str = event_date_object["end"]
             event_start_time_dt = self.parse_time_string(event_start_time_str)
