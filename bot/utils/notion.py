@@ -23,6 +23,11 @@ class NotionConnection:
     def set_people_db_id(self, people_db_id):
         self.people_db_id = people_db_id
 
+    async def _get_data_source_id(self, database_id):
+        """Resolve a database ID to its data source ID (Notion API 2025-09-03+)."""
+        database = await self.notion_client.databases.retrieve(database_id)
+        return database["data_sources"][0]["id"]
+
     async def get_events_from_notion(self):
         notion_events_filter = {
             "and": [
@@ -41,8 +46,9 @@ class NotionConnection:
             ]
         }
 
+        data_source_id = await self._get_data_source_id(self.events_db_id)
         response_object = await self.notion_client.data_sources.query(
-            self.events_db_id,
+            data_source_id,
             filter=notion_events_filter
         )
 
@@ -66,15 +72,17 @@ class NotionConnection:
             ]
         }
 
+        data_source_id = await self._get_data_source_id(self.tasks_db_id)
         response_object = await self.notion_client.data_sources.query(
-                self.tasks_db_id,
+                data_source_id,
                 filter=notion_tasks_completed_filter)
 
         return response_object
 
     async def get_people_from_notion(self):
+        data_source_id = await self._get_data_source_id(self.people_db_id)
         response_object = await self.notion_client.data_sources.query(
-                self.people_db_id)
+                data_source_id)
 
         return response_object
 
