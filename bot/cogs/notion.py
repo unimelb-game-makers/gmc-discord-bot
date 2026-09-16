@@ -1,5 +1,6 @@
 # Handle notion features
 
+import asyncio
 import discord
 from datetime import datetime, timedelta
 from dateutil import parser
@@ -142,13 +143,13 @@ class NotionCog(commands.Cog):
             return None
 
     # Update self.discord_events_thumbnails, if url is "" remove the thumbnail instead
-    def update_thumbnail(self, key, url):
+    async def update_thumbnail(self, key, url):
         if url == "":
             self.discord_events_thumbnails.pop(key, None)
             sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
             return
         try:
-            response = requests.get(url)
+            response = await asyncio.to_thread(requests.get, url, timeout=10)
             if response.status_code == 200:
                 image_bytes = response.content
                 self.discord_events_thumbnails[key] = image_bytes
@@ -217,7 +218,7 @@ class NotionCog(commands.Cog):
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Notion fetching Error: {e}")
-            return "Failed to query Notion events, with .env database id and filters."
+            return f"Failed to query Notion events: {e}"
 
         # Fetch discord events
         try:
@@ -243,7 +244,7 @@ class NotionCog(commands.Cog):
                 event_description = page_parsed["description"]
                 event_venue = page_parsed["venue"]
                 event_thumbnail_url = page_parsed["thumbnail"]
-                self.update_thumbnail(event_name, event_thumbnail_url)
+                await self.update_thumbnail(event_name, event_thumbnail_url)
 
                 if event_end_time_dt < self.current_time():
                     has_failure = True
@@ -545,7 +546,7 @@ class NotionCog(commands.Cog):
             assert "results" in response_object, "No results found in the response object"
         except Exception as e:
             print(f"Query Notion Tasks Error: {e}")
-            await interaction.followup.send("Failed to query Notion tasks, with .env database id and filters.")
+            await interaction.followup.send(f"Failed to query Notion tasks: {e}")
             return
 
         task_count, response_string_success = self.fetch_notion_tasks_summary(response_object)
