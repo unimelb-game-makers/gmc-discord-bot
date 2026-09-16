@@ -12,6 +12,7 @@ from bot.config import notion_authentication_token, notion_events_database_id, \
     notion_tasks_database_id, notion_people_database_id
 from bot.utils.memory import load_object, sync_object
 from bot.utils.notion import NotionConnection
+from bot.utils.thumbnail_store import ThumbnailStore
 import requests
 
 class NotionCog(commands.Cog):
@@ -29,8 +30,7 @@ class NotionCog(commands.Cog):
 
         self.discord_managing_event_names_filename = "discord_managing_event_names.pkl"
         self.discord_managing_event_names = load_object(self.discord_managing_event_names_filename, default_value=[])
-        self.discord_events_thumbnails_filename = "discord_events_thumbnails.pkl"
-        self.discord_events_thumbnails = load_object(self.discord_events_thumbnails_filename, default_value={})
+        self.discord_events_thumbnails = ThumbnailStore(legacy_filename="discord_events_thumbnails.pkl")
         self.daily_scheduled_time_filename = "daily_scheduled_time.pkl"
         self.daily_scheduled_time = load_object(self.daily_scheduled_time_filename, default_value={"hour": 10, "minute": 0})
         self.last_run_date_filename = "last_run_date.pkl"
@@ -146,16 +146,8 @@ class NotionCog(commands.Cog):
     async def update_thumbnail(self, key, url):
         if url == "":
             self.discord_events_thumbnails.pop(key, None)
-            sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
             return
-        try:
-            response = await asyncio.to_thread(requests.get, url, timeout=10)
-            if response.status_code == 200:
-                image_bytes = response.content
-                self.discord_events_thumbnails[key] = image_bytes
-                sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
-        except Exception as e:
-            print(f"Error fetching image from URL: {e}")
+        await asyncio.to_thread(self.discord_events_thumbnails.fetch, key, url, requests)
 
     # Clear all discord event memory
     @app_commands.command(name="cleardiscordeventsmemory",
@@ -164,8 +156,7 @@ class NotionCog(commands.Cog):
     async def cleardiscordeventsmemory(self, interaction: discord.Interaction):
         self.discord_managing_event_names = []
         sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
-        self.discord_events_thumbnails = {}
-        sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
+        self.discord_events_thumbnails.clear()
         response_string = "Clear complete!"
         await interaction.response.send_message(response_string)
 
@@ -204,8 +195,7 @@ class NotionCog(commands.Cog):
         # Also clear memory
         self.discord_managing_event_names = []
         sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
-        self.discord_events_thumbnails = {}
-        sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
+        self.discord_events_thumbnails.clear()
 
     # Attempt to sync events from notion to guild
     # Returns update status as string
@@ -333,11 +323,11 @@ class NotionCog(commands.Cog):
                     has_failure = True
                     response_string_failure += "- " + event_name + " (Cannot remove the event)\n"
                 self.discord_events_thumbnails.pop(event_name, None)
-                sync_object(self.discord_events_thumbnails, self.discord_events_thumbnails_filename)
             else:
                 response_string_success += "- " + event_name + " (Already removed)\n"
         self.discord_managing_event_names = notion_event_names
         sync_object(self.discord_managing_event_names, self.discord_managing_event_names_filename)
+        self.discord_events_thumbnails.prune(notion_event_names)
 
         # Follow up message
         response_string += response_string_success

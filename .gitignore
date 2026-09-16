@@ -189,3 +189,4 @@ working_memory/*.pkl.lock
 
 # Vscode settings
 .vscode
+working_memory/event_thumbnails/
